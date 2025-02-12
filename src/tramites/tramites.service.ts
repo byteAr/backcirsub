@@ -1,26 +1,23 @@
 import { Injectable } from '@nestjs/common';
-import { CreateTramiteDto } from './dto/create-tramite.dto';
-import { UpdateTramiteDto } from './dto/update-tramite.dto';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class TramitesService {
-  create(createTramiteDto: CreateTramiteDto) {
-    return createTramiteDto;
+  constructor(private prisma: PrismaService) {}
+
+  // Llamar a un procedimiento almacenado sin retorno
+  async crearTramite(nombre: string, tipo: number) {
+    await this.prisma.$executeRaw`
+      EXEC dbo.CrearTramite @Nombre = ${nombre}, @Tipo = ${tipo}
+    `;
+    return { mensaje: 'Trámite creado exitosamente' };
   }
 
-  findAll() {
-    return `Esta acción retorna todos los trámites`;
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} tramite`;
-  }
-
-  update(id: string, updateTramiteDto: UpdateTramiteDto) {
-    return `This action updates a #${id} tramite`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} tramite`;
+  // Llamar a un procedimiento almacenado con retorno
+  async obtenerTramites() {
+    const tramites = await this.prisma.$queryRaw`
+      EXEC dbo.ObtenerTramites
+    `;
+    return tramites;
   }
 }
