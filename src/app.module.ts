@@ -5,7 +5,6 @@ import { AppService } from './app.service';
 import { TramitesModule } from './tramites/tramites.module';
 import { AuthModule } from './auth/auth.module';
 import { EnvConfiguration } from './config/app.config';
-import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
@@ -13,8 +12,7 @@ import { PrismaModule } from './prisma/prisma.module';
       load: [EnvConfiguration]
     }),
     TramitesModule,
-    AuthModule,
-    PrismaModule],
+    AuthModule],
   controllers: [AppController],
   providers: [AppService],
 })
