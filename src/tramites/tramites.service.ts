@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTramiteDto } from './dto/create-tramite.dto';
 import { UpdateTramiteDto } from './dto/update-tramite.dto';
@@ -10,6 +10,8 @@ export class TramitesService {
 
   // Llamar a un procedimiento almacenado sin retorno
   async createTramite(data: CreateTramiteDto) {
+    console.log(data);
+    
     const { detalle, fechaInicio, fechaFin, tipoPerioricidad, prioridad, idTramitesGrupo,activo,fechaCreacion,personaIdCreacion } = data;
      
     try {      
@@ -60,6 +62,14 @@ export class TramitesService {
     `;
     
     return tramites;
+  }
+
+  async getAllDocumentos() {
+    const tiposDocumentos = await this.prisma.$queryRaw`
+      EXEC dbo.Tipo_Documento_Lista
+    `;
+    
+    return tiposDocumentos;
   }
   async getAllResponsables() {
     const tramites = await this.prisma.$queryRaw`

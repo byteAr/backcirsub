@@ -13,6 +13,11 @@ export class TramitesController {
     return this.tramitesService.getAllTramites();
   }
 
+  @Get('tipodocumentos')
+  async obtenerTipoDocumentos() {
+    return this.tramitesService.getAllDocumentos();
+  }
+
   @Post() 
   crearTramite(@Body() createTramiteDto: CreateTramiteDto) {    
     return this.tramitesService.createTramite(createTramiteDto);

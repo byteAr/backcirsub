@@ -18,4 +18,11 @@ export class AuthController {
     return this.authService.register( createUserDto)
   }
 
+  @Post('addpersona')
+  createPersona(@Body() persona: any){
+    return this.authService.createPersona( persona)
+  }
+
+
+
 }
