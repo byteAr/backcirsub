@@ -1,0 +1,27 @@
+version: '3'
+
+services:
+  cirsubbackend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: cirsubbackend-docker
+    container_name: cirsubbackend
+    restart: always # reiniciar el contenedor si se detiene
+    ports:
+      - "${PORT}:${PORT}"
+    # working_dir: /var/www/pokedex
+    environment:
+      DB_USER: ${DB_USER}
+      PORT: ${PORT}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DATABASE_URL: ${DATABASE_URL}
+    
+    # volumes:
+    #   - ./:/var/www/pokedex
+
+  
+    # volumes:
+    #   - ./mongo:/data/db
