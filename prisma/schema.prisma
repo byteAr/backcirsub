@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,6 +7,293 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Dummy {
-  id Int @id @default(autoincrement())
+model Contacto_Tipo {
+  Id                                                               Int                 @id(map: "PK_Contacto_Tipo") @default(autoincrement())
+  Detalle                                                          String              @unique(map: "IX_Contacto_Tipo") @db.NVarChar(50)
+  Observaciones                                                    String?             @db.NVarChar(100)
+  ULTIMA_MODIFICACION_                                             DateTime?
+  BORRADO_                                                         DateTime?
+  Personas_Contacto_Personas_Contacto_Contacto_TipoToContacto_Tipo Personas_Contacto[] @relation("Personas_Contacto_Contacto_TipoToContacto_Tipo")
+}
+
+model Filial {
+  Id                   Int        @id(map: "PK_Filial") @default(autoincrement())
+  Detalle              String     @db.VarChar(50)
+  Direccion            String?    @db.VarChar(100)
+  Codigo_Postal        String?    @db.VarChar(20)
+  ULTIMA_MODIFICACION_ DateTime?  @db.DateTime
+  BORRADO_             DateTime?
+  Personal             Personal[]
+}
+
+model Mensajes_Notificacion {
+  Id                   Int       @id(map: "PK__Mensajes__3214EC077768B926") @default(autoincrement())
+  Asunto               String?   @db.NVarChar(255)
+  Cuerpo               String?   @db.NVarChar(Max)
+  Destinatario         String?   @db.NVarChar(255)
+  Fecha_Creacion       DateTime? @default(now(), map: "DF__Mensajes___Fecha__19DFD96B") @db.DateTime
+  Estado               String?   @default("Pendiente", map: "DF__Mensajes___Estad__1AD3FDA4") @db.NVarChar(50)
+  Fecha_Envio          DateTime? @db.DateTime
+  ULTIMA_MODIFICACION_ DateTime?
+  BORRADO_             DateTime?
+}
+
+model Personal {
+  Id                                         Int         @id(map: "PK_Personal") @default(autoincrement())
+  Personas_Id                                Int
+  Filial_Id                                  Int?        @default(0, map: "DF__Personal__Filial__398D8EEE")
+  Tipo_Area                                  Int?        @default(0, map: "DF__Personal__Tipo_A__3A81B327")
+  Tipo_Cargo                                 Int?        @default(0, map: "DF__Personal__Tipo_C__3B75D760")
+  es_Encargado_Area                          Boolean?    @default(false, map: "DF__Personal__es_Enc__3C69FB99")
+  ULTIMA_MODIFICACION_                       DateTime?
+  BORRADO_                                   DateTime?
+  Filial                                     Filial?     @relation(fields: [Filial_Id], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Personal_Filial")
+  Personas                                   Personas    @relation(fields: [Personas_Id], references: [Id], onUpdate: NoAction, map: "FK_Personal_Personas")
+  Tipo_Area_Personal_Tipo_AreaToTipo_Area    Tipo_Area?  @relation("Personal_Tipo_AreaToTipo_Area", fields: [Tipo_Area], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Personal_Tipo_Area")
+  Tipo_Cargo_Personal_Tipo_CargoToTipo_Cargo Tipo_Cargo? @relation("Personal_Tipo_CargoToTipo_Cargo", fields: [Tipo_Cargo], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Personal_Tipo_Cargo")
+}
+
+model Personas {
+  Id                                                     Int                                 @id(map: "PK_Personas") @default(autoincrement())
+  Tipo_Documento                                         Int
+  Documento                                              String                              @db.VarChar(50)
+  Apellido                                               String                              @db.NVarChar(50)
+  Nombre                                                 String                              @db.NVarChar(50)
+  Fecha_Nacimiento                                       DateTime?                           @db.Date
+  Activo                                                 Boolean?                            @default(true, map: "DF_Personas_Activo")
+  ULTIMA_MODIFICACION_                                   DateTime?
+  BORRADO_                                               DateTime?
+  Personal                                               Personal[]
+  Tipo_Documento_Personas_Tipo_DocumentoToTipo_Documento Tipo_Documento                      @relation("Personas_Tipo_DocumentoToTipo_Documento", fields: [Tipo_Documento], references: [Id], onUpdate: NoAction, map: "FK_Personas_Tipo_Documento")
+  Personas_Contacto                                      Personas_Contacto[]
+  Personas_Direccion                                     Personas_Direccion[]
+  sis_Usuarios                                           sis_Usuarios?
+  Socios                                                 Socios[]
+  Tramites                                               Tramites[]
+  Tramites_Cumplimentar_Responsable                      Tramites_Cumplimentar_Responsable[]
+
+  @@unique([Tipo_Documento, Documento], map: "IX_Personas")
+}
+
+model Personas_Contacto {
+  Id                                                           Int            @id(map: "PK_Personas_Contacto") @default(autoincrement())
+  Personas_Id                                                  Int
+  Contacto_Tipo                                                Int?
+  Detalle                                                      String?        @db.NVarChar(50)
+  Observaciones                                                String?        @db.NVarChar(100)
+  ULTIMA_MODIFICACION_                                         DateTime?
+  BORRADO_                                                     DateTime?
+  Contacto_Tipo_Personas_Contacto_Contacto_TipoToContacto_Tipo Contacto_Tipo? @relation("Personas_Contacto_Contacto_TipoToContacto_Tipo", fields: [Contacto_Tipo], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Personas_Contacto_Contacto_Tipo")
+  Personas                                                     Personas       @relation(fields: [Personas_Id], references: [Id], onUpdate: NoAction, map: "FK_Personas_Contacto_Personas")
+
+  @@unique([Personas_Id, Contacto_Tipo, Detalle], map: "IX_Personas_Contacto")
+}
+
+model Personas_Direccion {
+  Id                         Int       @id(map: "PK_Personas_Direccion") @default(autoincrement())
+  Personas_Id                Int
+  Contacto_Tipo_Categoria_Id Int?
+  Direccion                  String?   @db.NVarChar(150)
+  Codigo_Postal              String?   @db.VarChar(50)
+  Observaciones              String?   @db.NVarChar(100)
+  ULTIMA_MODIFICACION_       DateTime?
+  BORRADO_                   DateTime?
+  Personas                   Personas  @relation(fields: [Personas_Id], references: [Id], onUpdate: NoAction, map: "FK_Personas_Direccion_Personas")
+}
+
+model sis_Login_Intentos {
+  Id                   Int          @id(map: "PK__seg_Logi__3214EC07A7C715CB") @default(autoincrement())
+  seg_Usuarios_Id      Int
+  Intento_Fecha        DateTime     @default(now(), map: "DF__seg_Login__Inten__7834CCDD") @db.DateTime
+  Intento_IPAddress    String       @db.NVarChar(50)
+  Intento_ok           Boolean
+  ULTIMA_MODIFICACION_ DateTime?    @default(now(), map: "DF_seg_Login_Intentos_ULTIMA_MODIFICACION_")
+  BORRADO_             DateTime?
+  sis_Usuarios         sis_Usuarios @relation(fields: [seg_Usuarios_Id], references: [Id], onUpdate: NoAction, map: "FK_seg_Login_Intentos_seg_Usuarios")
+}
+
+model sis_Modulos {
+  Id                   Int       @id(map: "PK_sis_Modulos") @default(autoincrement())
+  Nombre               String    @db.NVarChar(100)
+  Descripcion          String?   @db.NVarChar(255)
+  Activo               Boolean
+  ULTIMA_MODIFICACION_ DateTime?
+  BORRADO_             DateTime?
+
+  @@unique([Nombre, BORRADO_], map: "IX_sis_Modulos")
+}
+
+model sis_PermisoModulos {
+  Id                   Int       @id(map: "PK_sis_PermisoModulos") @default(autoincrement())
+  Permisos_Id          Int
+  Modulos_Id           Int
+  ULTIMA_MODIFICACION_ DateTime?
+  BORRADO_             DateTime?
+
+  @@unique([Modulos_Id, Permisos_Id, BORRADO_], map: "IX_sis_PermisoModulos")
+}
+
+model sis_Permisos {
+  Id                   Int       @id(map: "PK_sis_Permisos") @default(autoincrement())
+  Nombre               String    @db.NVarChar(100)
+  Descripcion          String?   @db.NVarChar(255)
+  Activo               Boolean
+  ULTIMA_MODIFICACION_ DateTime?
+  BORRADO_             DateTime?
+
+  @@unique([Nombre, BORRADO_], map: "IX_sis_Permisos")
+}
+
+model sis_Roles {
+  Id                   Int       @id(map: "PK_sis_Roles") @default(autoincrement())
+  Nombre               String    @db.NVarChar(100)
+  Descripcion          String?   @db.NVarChar(255)
+  Activo               Boolean
+  ULTIMA_MODIFICACION_ DateTime?
+  BORRADO_             DateTime?
+
+  @@unique([Nombre, BORRADO_], map: "IX_sis_Roles")
+}
+
+model sis_RolPermisos {
+  Id                   Int       @id(map: "PK_sis_RolPermisos") @default(autoincrement())
+  Roles_Id             Int
+  Permisos_Id          Int
+  ULTIMA_MODIFICACION_ DateTime?
+  BORRADO_             DateTime?
+
+  @@unique([Roles_Id, Permisos_Id, BORRADO_], map: "IX_sis_RolPermisos")
+}
+
+model sis_Usuarios {
+  Id                   Int                  @id(map: "PK__seg_Usua__3214EC074D0DAA5F") @default(autoincrement())
+  Personas_Id          Int                  @unique(map: "IX_seg_Usuarios")
+  Usuario              String               @unique(map: "IX_seg_Usuarios_1") @db.NVarChar(50)
+  Pass_Hash            String?              @db.NVarChar(255)
+  Pass_Salt            String?              @db.NVarChar(255)
+  Bloqueado            Boolean?             @default(false, map: "DF__seg_Usuar__Bloqu__727BF387")
+  Intentos_Fallidos    Int?                 @default(0, map: "DF__seg_Usuar__Inten__737017C0")
+  Intentos_Ultimo      DateTime?            @db.DateTime
+  Fecha_Creacion       DateTime?            @default(now(), map: "DF__seg_Usuar__Fecha__74643BF9") @db.DateTime
+  Fecha_Cambio_Clave   DateTime?            @default(now(), map: "DF__seg_Usuar__Fecha__75586032") @db.DateTime
+  Activo               Boolean?             @default(false, map: "DF_seg_Usuarios_Activo")
+  ULTIMA_MODIFICACION_ DateTime?            @default(now(), map: "DF_seg_Usuarios_ULTIMA_MODIFICACION_")
+  BORRADO_             DateTime?
+  sis_Login_Intentos   sis_Login_Intentos[]
+  Personas             Personas             @relation(fields: [Personas_Id], references: [Id], onUpdate: NoAction, map: "FK_seg_Usuarios_Personas1")
+}
+
+model sis_UsuariosRoles {
+  Id                   Int       @id(map: "PK_sis_UsuariosRoles") @default(autoincrement())
+  Usuarios_Id          Int
+  Roles_Id             Int
+  ULTIMA_MODIFICACION_ DateTime?
+  BORRADO_             DateTime?
+
+  @@unique([Usuarios_Id, Roles_Id, BORRADO_], map: "IX_sis_UsuariosRoles")
+}
+
+model Socios {
+  Id                   Int       @id(map: "PK_Socios") @default(autoincrement())
+  Persona_Id           Int
+  Socio_Tipo_Id        Int
+  Socio_Tipo_Estado    Int
+  Socio_Titular_Id     Int
+  ULTIMA_MODIFICACION_ DateTime?
+  BORRADO_             DateTime?
+  Personas             Personas  @relation(fields: [Persona_Id], references: [Id], onUpdate: NoAction, map: "FK_Socios_Personas")
+}
+
+model sysdiagrams {
+  name         String @db.NVarChar(128)
+  principal_id Int
+  diagram_id   Int    @id(map: "PK__sysdiagr__C2B05B61372C15A8") @default(autoincrement())
+  version      Int?
+  definition   Bytes?
+
+  @@unique([principal_id, name], map: "UK_principal_name")
+}
+
+model Tipo_Area {
+  Id                                     Int        @id(map: "PK_Tipo_Area") @default(autoincrement())
+  Detalle                                String     @db.VarChar(50)
+  Direccion                              String?    @db.VarChar(100)
+  Codigo_Postal                          String?    @db.VarChar(20)
+  ULTIMA_MODIFICACION_                   DateTime?  @db.DateTime
+  BORRADO_                               DateTime?
+  Personal_Personal_Tipo_AreaToTipo_Area Personal[] @relation("Personal_Tipo_AreaToTipo_Area")
+}
+
+model Tipo_Cargo {
+  Id                                       Int        @id(map: "PK_Tipo_Cargo") @default(autoincrement())
+  Detalle                                  String     @db.VarChar(50)
+  ULTIMA_MODIFICACION_                     DateTime?  @db.DateTime
+  BORRADO_                                 DateTime?
+  Personal_Personal_Tipo_CargoToTipo_Cargo Personal[] @relation("Personal_Tipo_CargoToTipo_Cargo")
+}
+
+model Tipo_Documento {
+  Id                                               Int        @id(map: "PK_Tipo_Documento") @default(autoincrement())
+  Detalle                                          String     @db.VarChar(20)
+  Detalle_largo                                    String     @db.VarChar(50)
+  ULTIMA_MODIFICACION_                             DateTime?  @db.DateTime
+  BORRADO_                                         DateTime?
+  Personas_Personas_Tipo_DocumentoToTipo_Documento Personas[] @relation("Personas_Tipo_DocumentoToTipo_Documento")
+}
+
+model Tipo_Perioricidad {
+  Id                                                     Int        @id(map: "PK_Tipo_Perioricidad") @default(autoincrement())
+  Codigo_Perioricidad                                    Int        @unique(map: "IX_Tipo_Perioricidad")
+  Detalle                                                String     @db.VarChar(50)
+  ULTIMA_MODIFICACION_                                   DateTime?
+  BORRADO_                                               DateTime?
+  Tramites_Tramites_Tipo_PerioricidadToTipo_Perioricidad Tramites[] @relation("Tramites_Tipo_PerioricidadToTipo_Perioricidad")
+}
+
+model Tramites {
+  Id                                                              Int                     @id(map: "PK_Tramites") @default(autoincrement())
+  Detalle                                                         String                  @unique(map: "IX_Tramites") @db.VarChar(50)
+  Fecha_Inicio                                                    DateTime?               @db.Date
+  Fecha_Fin                                                       DateTime?               @db.Date
+  Tipo_Perioricidad                                               Int?
+  Prioridad                                                       Int                     @default(1, map: "DF__Tramites__Priori__3D5E1FD2")
+  Id_Tramites_Grupo                                               Int?                    @default(0, map: "DF__Tramites__Id_Tra__3E52440B")
+  Activo                                                          Boolean?                @default(false, map: "DF__Tramites__Activo__3F466844")
+  Fecha_Creacion                                                  DateTime                @db.DateTime
+  Persona_Id_Creacion                                             Int
+  ULTIMA_MODIFICACION_                                            DateTime?               @db.DateTime
+  BORRADO_                                                        DateTime?
+  Personas                                                        Personas                @relation(fields: [Persona_Id_Creacion], references: [Id], onUpdate: NoAction, map: "FK_Tramites_Personas")
+  Tipo_Perioricidad_Tramites_Tipo_PerioricidadToTipo_Perioricidad Tipo_Perioricidad?      @relation("Tramites_Tipo_PerioricidadToTipo_Perioricidad", fields: [Tipo_Perioricidad], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Tramites_Tipo_Perioricidad")
+  Tramites_Cumplimentar                                           Tramites_Cumplimentar[]
+}
+
+model Tramites_Cumplimentar {
+  Id                                Int                                 @id(map: "PK_Tramites_Cumplimentar") @default(autoincrement())
+  Tramites_Id                       Int
+  Fecha_Cumplimiento                DateTime                            @db.Date
+  Fecha_Cumplimentado               DateTime?                           @db.Date
+  Persona_Id_que_cumplimento        Int?
+  Comprobante                       Bytes?
+  Estado                            Boolean                             @default(false, map: "DF__Tramites___Estad__403A8C7D")
+  ULTIMA_MODIFICACION_              DateTime?
+  BORRADO_                          DateTime?
+  Tramites                          Tramites                            @relation(fields: [Tramites_Id], references: [Id], onUpdate: NoAction, map: "FK_Tramites_Cumplimentar_Tramites")
+  Tramites_Cumplimentar_Responsable Tramites_Cumplimentar_Responsable[]
+
+  @@unique([Tramites_Id, Fecha_Cumplimiento], map: "IX_Tramites_Cumplimentar")
+}
+
+model Tramites_Cumplimentar_Responsable {
+  Id                        Int                   @id(map: "PK_Tramites_Responsable") @default(autoincrement())
+  Tramites_Cumplimentar_Id  Int
+  Personas_Id               Int
+  Persona_responsable_Email String                @db.VarChar(50)
+  Fecha_Aviso_Email         DateTime?             @db.DateTime
+  ULTIMA_MODIFICACION_      DateTime?             @db.DateTime
+  BORRADO_                  DateTime?
+  Personas                  Personas              @relation(fields: [Personas_Id], references: [Id], onUpdate: NoAction, map: "FK_Tramites_Responsable_Personas")
+  Tramites_Cumplimentar     Tramites_Cumplimentar @relation(fields: [Tramites_Cumplimentar_Id], references: [Id], onUpdate: NoAction, map: "FK_Tramites_Responsable_Tramites_Cumplimentar")
+
+  @@unique([Personas_Id, Tramites_Cumplimentar_Id], map: "IX_Tramites_Responsable")
 }

@@ -15,8 +15,16 @@ export class AuthService {
     return loginUserDto;
   }
 
-  register(createUserDto: CreateUserDto) {
-    return `This action returns all auth`;
+  
+
+  async register(dni: string) {
+    const response = await this.prismaService.personas.findMany({
+      where: {
+        Documento: dni, 
+      },
+    });
+  
+    return response;
   }
 
   async createPersona(persona: any) {
