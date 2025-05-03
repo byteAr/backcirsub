@@ -3,6 +3,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { User } from './interfaces/getUser.interface';
 
 @Injectable()
 export class AuthService {
@@ -14,17 +15,21 @@ export class AuthService {
   login(loginUserDto: LoginUserDto) {
     return loginUserDto;
   }
-
-  
+ 
 
   async register(dni: string) {
-    const response = await this.prismaService.personas.findMany({
+    
+    const persona = await this.prismaService.personas.findFirst({
       where: {
-        Documento: dni, 
+        Documento: dni,
       },
+      include: {
+        Personas_Contacto: true,
+        sis_Usuarios: true
+      }
     });
   
-    return response;
+    return persona; // si existe, devuelve el objeto; si no, devuelve null
   }
 
   async createPersona(persona: any) {

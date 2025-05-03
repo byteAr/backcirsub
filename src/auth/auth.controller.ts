@@ -14,13 +14,13 @@ export class AuthController {
   }
 
   @Post('register')
-  createUser(@Body('dni') dni: string){
+  createUser(@Body('dni') dni: string){    
     return this.authService.register( dni)
   }
 
   @Post('addpersona')
-  createPersona(@Body() persona: any){
-    return this.authService.createPersona( persona)
+  createPersona(@Body('dni') dni: string){
+    return this.authService.createPersona( dni)
   }
 
 
