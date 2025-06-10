@@ -1,27 +1,46 @@
-version: '3'
 
 services:
   cirsubbackend:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     image: cirsubbackend-docker
     container_name: cirsubbackend
-    restart: always # reiniciar el contenedor si se detiene
+    restart: always # Reiniciar el contenedor si se detiene
     ports:
-      - "${PORT}:${PORT}"
-    # working_dir: /var/www/pokedex
+      - "${PORT}:${PORT}" # Expone el puerto de la aplicación
+
     environment:
+      # Variables de entorno de la base de datos (ya presentes)
       DB_USER: ${DB_USER}
-      PORT: ${PORT}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DATABASE_URL: ${DATABASE_URL}
-    
-    # volumes:
-    #   - ./:/var/www/pokedex
+      PORT: ${PORT} # El puerto en el que escucha tu aplicación NestJS
 
-  
-    # volumes:
-    #   - ./mongo:/data/db
+      # Variables de entorno de Twilio (NUEVAS)
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_WHATSAPP_NUMBER: ${TWILIO_WHATSAPP_NUMBER}
+
+      # Variables de entorno de Redis (NUEVAS)
+      REDIS_HOST: redis # El nombre del servicio de Redis dentro de la red de Docker Compose
+      REDIS_PORT: 6379 # Puerto por defecto de Redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD} # La contraseña de Redis, si la tiene
+
+    depends_on:
+      - redis # Asegura que el servicio 'redis' se inicie antes que 'cirsubbackend'
+
+  redis: # Definimos el nuevo servicio de Redis
+    image: redis:latest # Usamos la imagen oficial de Redis
+    container_name: cirsubbackend-redis
+    restart: always
+    ports:
+      - "6379:6379" # Exponemos el puerto de Redis (útil para acceder desde el host, ej. con redis-cli)
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} # Habilita persistencia AOF y establece contraseña
+    volumes:
+      - redis_data:/data # Monta un volumen para persistir los datos de Redis
+
+volumes:
+  redis_data: # Definimos el volumen para la persistencia de datos de Redis

@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { TramitesModule } from './tramites/tramites.module';
 import { AuthModule } from './auth/auth.module';
 import { EnvConfiguration } from './config/app.config';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -12,11 +13,13 @@ import { EnvConfiguration } from './config/app.config';
       load: [EnvConfiguration]
     }),
     TramitesModule,
-    AuthModule],
+    AuthModule,
+    RedisModule],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {
 
   constructor() {}
+  
 }
