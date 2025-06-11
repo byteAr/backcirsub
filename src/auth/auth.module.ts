@@ -4,9 +4,10 @@ import { AuthController } from './auth.controller';
 import { PrismaModule } from 'src/prisma/prisma.module';
 
 import { RedisModule } from '../redis/redis.module';
+import { TwilioModule } from '../twilio/twilio.module';
 
 @Module({
-  imports:[PrismaModule, RedisModule],
+  imports:[PrismaModule, RedisModule, TwilioModule],
   controllers: [AuthController],
   providers: [AuthService],
   exports: [AuthService],

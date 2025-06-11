@@ -25,6 +25,7 @@ services:
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
       TWILIO_WHATSAPP_NUMBER: ${TWILIO_WHATSAPP_NUMBER}
+      TWILIO_OTP_TEMPLATE_SID: ${TWILIO_OTP_TEMPLATE_SID}
 
       # Variables de entorno de Redis (NUEVAS)
       REDIS_HOST: redis # El nombre del servicio de Redis dentro de la red de Docker Compose
@@ -40,7 +41,7 @@ services:
     restart: always
     ports:
       - "6379:6379" # Exponemos el puerto de Redis (útil para acceder desde el host, ej. con redis-cli)
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} # Habilita persistencia AOF y establece contraseña
+    command: redis-server --appendonly yes # Habilita persistencia AOF y establece contraseña
     volumes:
       - redis_data:/data # Monta un volumen para persistir los datos de Redis
 

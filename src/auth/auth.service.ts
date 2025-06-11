@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger  } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 
@@ -10,6 +10,8 @@ import { RedisService } from 'src/redis/redis.service';
 export class AuthService {
 
   private readonly OTP_EXPIRATION_SECONDS = 20 * 60;
+
+  private readonly logger = new Logger(AuthService.name);
   
   constructor(private prismaService:PrismaService,
     private readonly redisService: RedisService
@@ -60,6 +62,7 @@ export class AuthService {
   async saveOtp(phoneNumber: string, otp: string): Promise<void> {
     const key = `otp:${phoneNumber}`;
     await this.redisService.set(key, otp, this.OTP_EXPIRATION_SECONDS);
+    this.logger.log(`OTP ${otp} guardada para ${phoneNumber} en Redis con ${this.OTP_EXPIRATION_SECONDS}s de expiración.`);
   }
 
   async verifyOtp(phoneNumber: string, otp: string): Promise<boolean> {

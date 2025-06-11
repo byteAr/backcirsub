@@ -6,6 +6,8 @@ import { TramitesModule } from './tramites/tramites.module';
 import { AuthModule } from './auth/auth.module';
 import { EnvConfiguration } from './config/app.config';
 import { RedisModule } from './redis/redis.module';
+import { TwilioService } from './twilio/twilio.service';
+import { TwilioModule } from './twilio/twilio.module';
 
 @Module({
   imports: [
@@ -14,9 +16,10 @@ import { RedisModule } from './redis/redis.module';
     }),
     TramitesModule,
     AuthModule,
-    RedisModule],
+    RedisModule,
+    TwilioModule],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, TwilioService],
 })
 export class AppModule {
 
