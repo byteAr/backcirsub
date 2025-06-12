@@ -22,17 +22,40 @@ export class AuthService {
   }
  
 
-  async register(dni: string) {       
+  async register(dni: string) {
+    this.logger.log(`Intentando buscar persona con DNI: ${dni}`);
+
     const persona = await this.prismaService.personas.findFirst({
       where: {
         Documento: dni,
       },
       include: {
-       /*  Personas_Contacto: true,
-        sis_Usuarios: true */
-      }
-    });  
-    return persona; // si existe, devuelve el objeto; si no, devuelve null
+        // AHORA Personas_Contacto debe ser un objeto para que puedas anidar el 'select' y 'where'
+        Personas_Contacto: {
+          select: {
+            Id: true,
+            Detalle: true, // Esto es el valor del contacto (ej: el número de teléfono)
+            // Aquí 'Tipo_Contacto' es la propiedad de navegación a la tabla Tipo_Contacto
+            Tipo_Contacto: { // Confirmo que este nombre es correcto según tu schema.prisma
+              select: {
+                Detalle: true, // Este es el nombre del tipo de contacto (ej: "Celular")
+              },
+            },
+          },
+          where: {
+            // Aquí 'Tipo_Contacto' es la propiedad de navegación a la tabla Tipo_Contacto para el filtro
+            Tipo_Contacto: { // Confirmo que este nombre es correcto según tu schema.prisma
+              Detalle: 'Celular', // Puedes cambiar 'Celular' por el tipo de contacto que busques
+            }
+          }
+        },
+        // sis_Usuarios: true, // Si quieres incluir sis_Usuarios, descomenta esta línea.
+      },
+    });
+
+    this.logger.log(`Resultado de la búsqueda de persona: ${JSON.stringify(persona, null, 2)}`);
+
+    return persona;
   }
 
   async createPersona(persona: any) {

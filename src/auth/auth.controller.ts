@@ -36,7 +36,11 @@ export class AuthController {
   @Post('send-otp')
 @HttpCode(HttpStatus.OK)
 async sendOtp(@Body() sendOtpDto: SendOtpDto) {
-  const { phoneNumber } = sendOtpDto;
+  console.log('llego hasta acá en el backend');
+  
+  const { phoneNumber, email } = sendOtpDto;
+  console.log(`este es el mail:`, email);
+  
 
   const otp = this.authService.generateOtp();
   await this.authService.saveOtp(phoneNumber, otp);
