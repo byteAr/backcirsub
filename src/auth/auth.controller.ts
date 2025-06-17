@@ -7,6 +7,7 @@ import { LoginUserDto } from './dto/login-user.dto';
 import { TwilioService } from '../twilio/twilio.service'; // Importa el servicio de Twilio
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { passwordUser } from './dto/password-user.dto';
 
 
 
@@ -22,9 +23,15 @@ export class AuthController {
     return this.authService.login(loginUserDto);
   }
 
+  @Post('verifyDni')
+  verifyDni(@Body('dni') dni: string){  
+    
+    return this.authService.verifyDni( dni ) 
+  }
+
   @Post('register')
-  createUser(@Body('dni') dni: string){    
-    return this.authService.register( dni)
+  createUser(@Body() createUserDto:CreateUserDto){    
+    return this.authService.register( createUserDto)
   }
 
   @Post('addpersona')
@@ -34,16 +41,16 @@ export class AuthController {
 
   /* otp */
   @Post('send-otp')
-@HttpCode(HttpStatus.OK)
-async sendOtp(@Body() sendOtpDto: SendOtpDto) {
-  console.log('llego hasta acá en el backend');
+  @HttpCode(HttpStatus.OK)
+  async sendOtp(@Body() sendOtpDto: SendOtpDto) {
+    
   
-  const { phoneNumber, email } = sendOtpDto;
-  console.log(`este es el mail:`, email);
+    const { phoneNumber, email } = sendOtpDto;
+    console.log(`este es el mail:`, email);
   
 
-  const otp = this.authService.generateOtp();
-  await this.authService.saveOtp(phoneNumber, otp);
+    const otp = this.authService.generateOtp();
+    await this.authService.saveOtp(phoneNumber, otp);
 
   // ¡NUEVA FORMA DE LLAMAR A TwilioService!
   try {
@@ -65,7 +72,9 @@ async sendOtp(@Body() sendOtpDto: SendOtpDto) {
 
     if (isValid) {
       // Si la OTP es válida, respondemos con éxito
-      return { message: 'OTP verificada exitosamente.' };
+      return { 
+        ok: true,
+        message: 'OTP verificada exitosamente.' };
     } else {
       // Si la OTP no es válida (no coincide, o ha expirado, o no existe)
       // Lanzamos una excepción 404 Not Found para indicar que la OTP no es "encontrada"
@@ -74,5 +83,14 @@ async sendOtp(@Body() sendOtpDto: SendOtpDto) {
       // Alternativamente, podrías usar new BadRequestException('OTP inválida.'); si prefieres 400.
     }
   }
+
+  @Post('resetPassword')
+  resetPassword(@Body() passwordUser: passwordUser){
+    const {id, password} = passwordUser;
+    
+    return this.authService.resetOrCreatePassword( passwordUser)
+  }
+
+  
 
 }
