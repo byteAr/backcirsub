@@ -91,6 +91,13 @@ export class AuthController {
     return this.authService.resetOrCreatePassword( passwordUser)
   }
 
+  @Post('prueba')
+  prueba(@Body() passwordUser: passwordUser){
+    const {id, password} = passwordUser;
+    
+    return this.authService.resetOrCreatePassword( passwordUser)
+  }
+
   
 
 }

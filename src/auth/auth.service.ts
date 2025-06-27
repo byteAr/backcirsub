@@ -86,16 +86,39 @@ export class AuthService {
   }
  
 
-  async register(createUserDto: CreateUserDto) {
-    const { dni, email, password, phoneNumber } = createUserDto
-    this.logger.log(`Intentando buscar persona con DNI: ${dni}`);
+  async register(createUserDto: CreateUserDto): Promise<any> { // Ajusta el tipo de retorno si puedes tipar el SP
+    try {
+      const rawResponse: any[] = await this.prismaService.$queryRaw`
+        EXEC dbo.sp_Perfil_Login @Documento = ${createUserDto.dni};
+      `;
 
-    
-    
+      // **Parseamos la cadena JSON**
+      if (rawResponse && rawResponse.length > 0) {
+        
+        const row = rawResponse[0];
 
-    
+        
+        const jsonString = row["JSON_F52E2B61-18A1-11d1-B105-00805F49916B"];
 
-    
+        if (jsonString) {
+          // Parseamos la cadena JSON a un objeto JavaScript
+          const parsedResult = JSON.parse(jsonString);
+          return parsedResult;
+        } else {
+          // Si el SP no devuelve JSON por algún motivo (ej. documento no encontrado)
+          // Acá puedemos devolver un objeto vacío o lanzar una excepción personalizada
+          return {}; // O manejar según la lógica de negocio
+        }
+      } else {
+        // Si no se devuelve ninguna fila (ej. no se encontró el documento, o error interno del SP antes del SELECT final)
+        return {}; // O lanzar una excepción específica
+      }
+
+    } catch (error) {
+      console.error('Error al llamar al procedimiento almacenado sp_Perfil_completo:', error);
+      // Puedes relanzar una excepción de NestJS si quieres que el controlador la capture
+      throw error; // O new InternalServerErrorException('Error al obtener el perfil del usuario');
+    }
   }
 
   async createPersona(persona: any) {
@@ -284,6 +307,13 @@ export class AuthService {
   
     return isMatch;
   }
+
+  async obtenerPersonaPorDni(dni: string): Promise<any> {
+    const result = await this.prismaService.$queryRaw`EXEC sp_obtenerPersonaPorDni @dni = ${dni}`;
+    return result;                            
+}
+
+ 
           
   
 
