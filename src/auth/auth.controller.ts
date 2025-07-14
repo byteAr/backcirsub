@@ -1,4 +1,7 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, InternalServerErrorException, NotFoundException, HttpStatus,  HttpCode } from '@nestjs/common';
+import { Response } from 'express';
+import { Controller, Get, Post, Body, Patch, Param, Delete, InternalServerErrorException, NotFoundException, HttpStatus,  HttpCode, UseInterceptors, UploadedFile, BadRequestException, UseGuards, Req, Res, } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+
 import { AuthService } from './auth.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -8,6 +11,11 @@ import { TwilioService } from '../twilio/twilio.service'; // Importa el servicio
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { passwordUser } from './dto/password-user.dto';
+import { AuthGuard } from '@nestjs/passport';
+import { GetUser } from './decorators/get-user.decorator';
+import { LoginUser } from './interfaces/loginUser.iterface';
+import { User } from './interfaces/getUser.interface';
+
 
 
 
@@ -23,11 +31,19 @@ export class AuthController {
     return this.authService.login(loginUserDto);
   }
 
-  @Post('verifyDni')
-  verifyDni(@Body('dni') dni: string){  
+
+  @Get('check-status')
+  @UseGuards( AuthGuard() )
+  checkAuthStatus(
+    // @Req() request: Express.Request
+    @GetUser() user: any
+  ) {
     
-    return this.authService.verifyDni( dni ) 
+    // console.log({ user : request.user});
+    return this.authService.checkAuthStatus(user)
   }
+
+  
 
   @Post('register')
   createUser(@Body() createUserDto:CreateUserDto){    
@@ -92,10 +108,55 @@ export class AuthController {
   }
 
   @Post('prueba')
-  prueba(@Body() passwordUser: passwordUser){
-    const {id, password} = passwordUser;
+  prueba(@Body('Documento') Documento:string){   
     
-    return this.authService.resetOrCreatePassword( passwordUser)
+    return this.authService.prueba( Documento)
+  }
+
+  @Post('verify-dni')
+  verifyDni(@Body('dni') dni:string){       
+    return this.authService.obtenerPersonaPorDni( dni)
+  }
+
+  @Post('upload-profileimage')
+  @UseInterceptors(FileInterceptor('profilePicture'))
+  async uploadFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('userId') userId: string
+  ) {
+    const parsedId = parseInt(userId);
+  if (isNaN(parsedId)) {
+    throw new BadRequestException('userId inválido');
+  }
+
+    return this.authService.saveImage(file, parsedId);
+  }
+
+  
+
+  @Get('private')
+  @UseGuards( AuthGuard() )
+  testingPrivateRoute(
+    // @Req() request: Express.Request
+    @GetUser() user: any
+  ) {
+
+    // console.log({ user : request.user});
+    return {
+      ok: true,
+      message: 'esta es una ruta privada',
+      user
+    }
+  }
+
+  @Get('profile-image/:id')
+  async getProfileImage(@Param('id') id: string, @Res() res: Response) {
+    const buffer = await this.authService.getProfileImage(Number(id));
+
+    res.setHeader('Content-Type', 'image/jpeg'); // o 'image/png'
+    res.setHeader('Content-Disposition', 'inline');
+
+    return res.end(buffer); // o res.send(buffer);
   }
 
   

@@ -1,10 +1,15 @@
-import { IsEmail, IsNumber, IsString, Matches, MaxLength, MinLength } from "class-validator";
+import { IsEmail, isNumber, IsNumber, IsString, Matches, MaxLength, MinLength } from "class-validator";
 
 export class CreateUserDto {
 
+
     @IsString()
-    @IsEmail()
-    email: string;
+    @MinLength(8)
+    dni: string;
+
+    @IsString()
+    @MinLength(8)
+    telefono: string
 
     @IsString()
     @MinLength(6)
@@ -14,13 +19,6 @@ export class CreateUserDto {
         message: 'The password must have a Uppercase, lowercase letter and a number'
     })
     password: string;
+    
 
-    @IsString()
-    @MinLength(7)
-    dni: string
-
-
-    @IsString()
-    @MinLength(8)
-    phoneNumber: string;
 }
