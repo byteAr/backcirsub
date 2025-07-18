@@ -1,49 +1,42 @@
-
-
+version: '3.8'
 
 services:
+  # Servicio de tu aplicación NestJS (Backend)
   cirsubbackend:
     build:
       context: .
       dockerfile: Dockerfile
     image: cirsubbackend-docker
     container_name: cirsubbackend
-    restart: always # Reiniciar el contenedor si se detiene
-    ports:
-      - "${PORT}:${PORT}" # Expone el puerto de la aplicación
-
-    environment:
-      # Variables de entorno de la base de datos (ya presentes)
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DATABASE_URL: ${DATABASE_URL}
-      PORT: ${PORT} # El puerto en el que escucha tu aplicación NestJS
-
-      # Variables de entorno de Twilio (NUEVAS)
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
-      TWILIO_WHATSAPP_NUMBER: ${TWILIO_WHATSAPP_NUMBER}
-      TWILIO_OTP_TEMPLATE_SID: ${TWILIO_OTP_TEMPLATE_SID}
-
-      # Variables de entorno de Redis (NUEVAS)
-      REDIS_HOST: redis # El nombre del servicio de Redis dentro de la red de Docker Compose
-      REDIS_PORT: 6379 # Puerto por defecto de Redis
-      REDIS_PASSWORD: ${REDIS_PASSWORD} # La contraseña de Redis, si la tiene
-
-    depends_on:
-      - redis # Asegura que el servicio 'redis' se inicie antes que 'cirsubbackend'
-
-  redis: # Definimos el nuevo servicio de Redis
-    image: redis:latest # Usamos la imagen oficial de Redis
-    container_name: cirsubbackend-redis
     restart: always
     ports:
-      - "6379:6379" # Exponemos el puerto de Redis (útil para acceder desde el host, ej. con redis-cli)
-    command: redis-server --appendonly yes # Habilita persistencia AOF y establece contraseña
-    volumes:
-      - redis_data:/data # Monta un volumen para persistir los datos de Redis
+      - "${PORT}:${PORT}" # Expone el puerto de la aplicación
+    
+    # Carga todas las variables de entorno desde el archivo .env
+    env_file:
+      - ./.env 
 
+    # Asegura que Redis se inicie y esté "sano" antes que cirsubbackend
+    depends_on:
+      redis:
+        condition: service_healthy 
+
+  # Servicio de Redis
+  redis:
+    image: redis:latest
+    container_name: cirsubbackend-redis
+    restart: always
+    environment: # Pasa la contraseña de Redis como variable de entorno
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"} # Establece la contraseña y persistencia AOF, solo si REDIS_PASSWORD no está vacío
+    volumes:
+      - redis_data:/data
+    healthcheck: # Healthcheck para Redis
+      test: ["CMD", "redis-cli", "--raw", "GET", "healthcheck"] # Un simple test de salud
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+# Definición de volúmenes para persistencia de datos
 volumes:
-  redis_data: # Definimos el volumen para la persistencia de datos de Redis
+  redis_data:
