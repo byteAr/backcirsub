@@ -113,6 +113,11 @@ export class AuthController {
     return this.authService.prueba( Documento)
   }
 
+  @Post('get-contact')
+  getContact(@Body('id') id:number){    
+    return this.authService.getContactUser( id)
+  }
+
   @Post('verify-dni')
   verifyDni(@Body('dni') dni:string){       
     return this.authService.obtenerPersonaPorDni( dni)
@@ -130,6 +135,23 @@ export class AuthController {
   }
 
     return this.authService.saveImage(file, parsedId);
+  }
+
+
+
+  @Post('update-profileimage')
+  @UseInterceptors(FileInterceptor('profilePicture'))
+  async updateFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('userId') userId: string
+  ) {
+    const parsedId = parseInt(userId);
+    
+  if (isNaN(parsedId)) {
+    throw new BadRequestException('userId inválido');
+  }
+
+    return this.authService.updateImage(file, parsedId);
   }
 
   

@@ -2,6 +2,12 @@ import { IsEmail, isNumber, IsNumber, IsString, Matches, MaxLength, MinLength } 
 
 export class CreateUserDto {
 
+    @IsNumber()
+    userId: number;
+
+    @IsString()
+    email: string;
+
 
     @IsString()
     @MinLength(8)

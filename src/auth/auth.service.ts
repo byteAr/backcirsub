@@ -122,11 +122,26 @@ export class AuthService {
           dni: createUserDto.dni
         })
 
+        const contactInCelular = await this.prismaService.$queryRaw`
+          EXEC Personas_Contacto_IN
+             @Personas_Id = ${responseLOginParseado.Login[0].Personas_Id},
+             @Tipo_Contacto_Id = ${2},
+             @Personas_Contacto_Detalle = ${createUserDto.telefono},
+             @Observaciones = ''
+        `
+        const contactInEmail = await this.prismaService.$queryRaw`
+          EXEC Personas_Contacto_IN
+             @Personas_Id = ${responseLOginParseado.Login[0].Personas_Id},
+             @Tipo_Contacto_Id = ${3},
+             @Personas_Contacto_Detalle = ${createUserDto.email},
+             @Observaciones = ''
+        `
+
         return {
           ok: true,
           token,
           userData: await this.perfilCompleto(createUserDto.dni)
-        }       
+        }              
         
       } else {
         // Si no se devuelve ninguna fila (ej. no se encontró el documento, o error interno del SP antes del SELECT final)
@@ -356,6 +371,19 @@ export class AuthService {
 
   }
 
+  async getContactUser(id: number){
+   const result: any[] = await this.prismaService.$queryRaw`EXEC Personas_Contacto_OU @Id = ${id};`;
+
+    /* const userLogin = result[0];
+    const userLoginB = userLogin["JSON_F52E2B61-18A1-11d1-B105-00805F49916B"];
+    const userBParseado = JSON.parse(userLoginB); */
+
+    return result;
+
+    
+
+  }
+
   async saveImage(file: Express.Multer.File, personasId: number){
     if (!file) {
       throw new BadRequestException('No se recibió archivo.');
@@ -375,6 +403,36 @@ export class AuthService {
   
       const result = await this.prismaService.$executeRaw`
         EXEC Personas_foto_IN @Personas_Id = ${personasId}, @Foto_1 = ${fotoBuffer};
+      `;
+  
+      return {
+        message: 'Imagen guardada correctamente',
+        dbResponse: result,
+      };
+    } catch (error) {
+      this.logger.error('Error al guardar imagen:', error);
+      throw new InternalServerErrorException('No se pudo guardar la imagen.');
+    }
+  }
+  async updateImage(file: Express.Multer.File, personasId: number){
+    if (!file) {
+      throw new BadRequestException('No se recibió archivo.');
+    }
+  
+
+    if (!file.mimetype.startsWith('image/')) {
+      throw new BadRequestException('El archivo debe ser una imagen.');
+    }
+  
+    if (file.size > 5 * 1024 * 1024) {
+      throw new BadRequestException('La imagen no puede superar los 5MB.');
+    }
+  
+    try {
+      const fotoBuffer = file.buffer;
+  
+      const result = await this.prismaService.$executeRaw`
+        EXEC Personas_foto_AC @Personas_Id = ${personasId}, @Foto_1 = ${fotoBuffer};
       `;
   
       return {
