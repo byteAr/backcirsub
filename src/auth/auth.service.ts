@@ -9,9 +9,25 @@ import { User } from './interfaces/getUser.interface';
 import { RedisService } from 'src/redis/redis.service';
 import { passwordUser } from './dto/password-user.dto';
 
+import * as sql from 'mssql';
+
 import * as bcrypt from 'bcrypt';
 
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { AwsRekognitionService } from 'src/aws/aws-rekognition.service';
+
+const sqlConfig: sql.config = {
+  user: 'marcos',
+  password: 'Margen.25', // ponla literal
+  server: '192.168.1.3',
+  port: 1433,
+  database: 'CIRSUB',
+  options: {
+    encrypt: false, // según tu imagen, no usas SSL
+    trustServerCertificate: true, // según tu imagen está marcado
+    enableArithAbort: true
+  }
+};
 
 @Injectable()
 export class AuthService {
@@ -23,7 +39,8 @@ export class AuthService {
   
   constructor(private prismaService:PrismaService,
     private readonly redisService: RedisService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly awsRekognitionService: AwsRekognitionService,
    ){}
 
   async login(loginUserDto: LoginUserDto){
@@ -42,7 +59,7 @@ export class AuthService {
       
     
       if (User && User.length > 0 && userBParseado.Login[0]) {      
-        /* await this.perfilCompleto(dni); */
+        
           const perfilCompletoUser: any[] = await this.prismaService.$queryRaw`
             EXEC sp_Perfil_completo @Documento = ${dni};
           `;
@@ -137,10 +154,15 @@ export class AuthService {
              @Observaciones = ''
         `
 
+        const userData = this.perfilCompleto(createUserDto.dni);
+
+        console.log('esto retorna al registrarme', userData);
+        
+
         return {
           ok: true,
           token,
-          userData: await this.perfilCompleto(createUserDto.dni)
+          userData
         }              
         
       } else {
@@ -345,6 +367,7 @@ export class AuthService {
   async obtenerPersonaPorDni(dni: string): Promise<any> {
     const result: any[] = await this.prismaService.$queryRaw`EXEC dbo.sp_Perfil_Login @Documento = ${dni};`;
 
+    
     const userLogin = result[0];
     const userLoginB = userLogin["JSON_F52E2B61-18A1-11d1-B105-00805F49916B"];
     const userBParseado = JSON.parse(userLoginB)
@@ -381,39 +404,47 @@ export class AuthService {
     return result;
 
     
-
   }
 
-  async saveImage(file: Express.Multer.File, personasId: number){
-    if (!file) {
-      throw new BadRequestException('No se recibió archivo.');
-    }
-  
+  async saveImage(file: Express.Multer.File, personasId: number) {
+  const pool = await sql.connect(sqlConfig);
 
-    if (!file.mimetype.startsWith('image/')) {
-      throw new BadRequestException('El archivo debe ser una imagen.');
-    }
-  
-    if (file.size > 5 * 1024 * 1024) {
-      throw new BadRequestException('La imagen no puede superar los 5MB.');
-    }
-  
-    try {
-      const fotoBuffer = file.buffer;
-  
-      const result = await this.prismaService.$executeRaw`
-        EXEC Personas_foto_IN @Personas_Id = ${personasId}, @Foto_1 = ${fotoBuffer};
-      `;
-  
+  try {
+    // ✅ Verificación de rostro visible, completo y confiable
+    const isValid = await this.awsRekognitionService.validateSingleFaceVisible(file.buffer);
+
+    if (!isValid) {
       return {
-        message: 'Imagen guardada correctamente',
-        dbResponse: result,
+        ok: false,
+        status: 'error',
+        message: 'Intente nuevamente. La imagen debe mostrar su rostro completo, claro y sin obstrucciones.',
       };
-    } catch (error) {
-      this.logger.error('Error al guardar imagen:', error);
-      throw new InternalServerErrorException('No se pudo guardar la imagen.');
     }
+
+    // ✅ Guardar imagen en la base de datos
+    const request = pool.request();
+    request.input('Personas_Id', sql.Int, personasId);
+    request.input('Foto_1', sql.VarBinary(sql.MAX), file.buffer);
+    request.input('Activo', sql.Bit, true);
+
+    const result = await request.execute('Personas_foto_IN');
+
+    return {
+      ok: true,
+      message: 'Imagen guardada correctamente',
+      dbResponse: result.recordset,
+    };
+  } catch (err) {
+    console.error('Error al guardar la imagen con mssql:', err);
+    throw new Error('No se pudo guardar la imagen.');
+  } finally {
+    await pool.close();
   }
+}
+
+
+
+  
   async updateImage(file: Express.Multer.File, personasId: number){
     if (!file) {
       throw new BadRequestException('No se recibió archivo.');
@@ -470,17 +501,20 @@ export class AuthService {
     }
   }
 
-  async getProfileImage(id: number): Promise<Buffer> {
-    const sql = `EXEC Personas_foto_OU @Id = ${id}`;
-const result = await this.prismaService.$queryRawUnsafe(sql) as any[];
+  // En tu auth.service.ts
+// En tu auth.service.ts
+async getProfileImage(id: number): Promise<Buffer> {
+    // Usa $queryRaw con template literals etiquetados
+    const result = await this.prismaService.$queryRaw`
+        EXEC Personas_foto_OU @Id = ${id};
+    ` as any[];
 
+    if (!result || result.length === 0 || !result[0].Foto_1) {
+      throw new NotFoundException('Imagen no encontrada');
+    }
 
-    if (!result || result.length === 0 || !result[0].Foto_1) {
-      throw new NotFoundException('Imagen no encontrada');
-    }
-
-    return result[0].Foto_1;
-  }
+    return result[0].Foto_1;
+}
           
   
 

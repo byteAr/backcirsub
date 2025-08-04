@@ -12,9 +12,10 @@ import { TwilioModule } from '../twilio/twilio.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 import { MulterModule } from '@nestjs/platform-express';
+import { AwsModule } from '../aws/aws.module';;
 
 @Module({
-  imports:[PrismaModule, RedisModule, TwilioModule, ConfigModule,
+  imports:[PrismaModule, RedisModule, TwilioModule, ConfigModule, AwsModule,
      PassportModule.register( {defaultStrategy: 'jwt'} ),
      JwtModule.registerAsync({
       imports:[ ConfigModule],

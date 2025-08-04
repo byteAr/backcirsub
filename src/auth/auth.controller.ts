@@ -129,6 +129,8 @@ export class AuthController {
     @UploadedFile() file: Express.Multer.File,
     @Body('userId') userId: string
   ) {
+    console.log('este es el id de usuario',userId);
+    
     const parsedId = parseInt(userId);
   if (isNaN(parsedId)) {
     throw new BadRequestException('userId inválido');

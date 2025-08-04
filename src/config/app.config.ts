@@ -11,6 +11,10 @@ export const EnvConfiguration = () => ({
     expirySeconds: parseInt(process.env.OTP_EXPIRY_SECONDS || '300', 10), // 5 minutos por defecto
     codeLength: parseInt(process.env.OTP_CODE_LENGTH || '6', 10),
   },
+  aws: {
+    rekognitionAccessKey: process.env.ACCESO_AWS_RECOGNITION,
+    rekognitionSecretKey: process.env.SECRET_AWS_RECOGNITION,
+  },
     enviroment: process.env.NODE_ENV || 'dev',
     port: process.env.PORT || 3000
 })
