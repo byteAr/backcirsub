@@ -8,6 +8,7 @@ import { EnvConfiguration } from './config/app.config';
 import { RedisModule } from './redis/redis.module';
 import { TwilioService } from './twilio/twilio.service';
 import { TwilioModule } from './twilio/twilio.module';
+import { CredencialModule } from './credencial/credencial.module';
 
 @Module({
   imports: [
@@ -17,7 +18,8 @@ import { TwilioModule } from './twilio/twilio.module';
     TramitesModule,
     AuthModule,
     RedisModule,
-    TwilioModule],
+    TwilioModule,
+    CredencialModule],
   controllers: [AppController],
   providers: [AppService, TwilioService],
 })
