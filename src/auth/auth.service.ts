@@ -109,6 +109,7 @@ export class AuthService {
  
 
   async register(createUserDto: CreateUserDto): Promise<any> {
+    
     try {
       const rawResponse: any[] = await this.prismaService.$queryRaw`
         EXEC dbo.sp_Perfil_Login @Documento = ${createUserDto.dni};        
@@ -122,6 +123,7 @@ export class AuthService {
 
         
         const responseLOginParseado = JSON.parse(jsonLogin)
+        
 
         const { password } = createUserDto;
 
@@ -133,13 +135,15 @@ export class AuthService {
              @Usuario = ${createUserDto.dni},
              @Pass_Hash = ${passwordHash}
         `
+        
+        
 
         const token = this.getJWT({
           id: responseLOginParseado.Login[0].Personas_Id,
           dni: createUserDto.dni
         })
 
-        const contactInCelular = await this.prismaService.$queryRaw`
+       /*  const contactInCelular = await this.prismaService.$queryRaw`
           EXEC Personas_Contacto_IN
              @Personas_Id = ${responseLOginParseado.Login[0].Personas_Id},
              @Tipo_Contacto_Id = ${2},
@@ -152,11 +156,9 @@ export class AuthService {
              @Tipo_Contacto_Id = ${3},
              @Personas_Contacto_Detalle = ${createUserDto.email},
              @Observaciones = ''
-        `
+        ` */
 
-        const userData = this.perfilCompleto(createUserDto.dni);
-
-        console.log('esto retorna al registrarme', userData);
+        const userData = await this.perfilCompleto(createUserDto.dni);
         
 
         return {
