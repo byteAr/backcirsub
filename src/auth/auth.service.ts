@@ -50,55 +50,47 @@ export class AuthService {
     if(!dni) return;
           
       const User: any[] = await this.prismaService.$queryRaw`
-        EXEC dbo.sp_Perfil_Login @Documento = ${dni};
+        EXEC sp_Login @Documento = ${dni};
       `;
 
-      const userLogin = User[0];
-      const userLoginB = userLogin["JSON_F52E2B61-18A1-11d1-B105-00805F49916B"];
-      const userBParseado = JSON.parse(userLoginB)
-      
+      const passwordHasheado = User[0].Pass_Hash
     
-      if (User && User.length > 0 && userBParseado.Login[0]) {      
-        
-          const perfilCompletoUser: any[] = await this.prismaService.$queryRaw`
-            EXEC sp_Perfil_completo @Documento = ${dni};
-          `;
+      if (User.length <= 0) return
 
-          const semiParseado = perfilCompletoUser[0];
-          const userParseado = semiParseado["JSON_F52E2B61-18A1-11d1-B105-00805F49916B"]
-          const parseado = JSON.parse(userParseado);         
+      const rawResponse= await this.perfilCompleto(loginUserDto.dni);
+      const userPosition = rawResponse[0];
+      const userDataPre= userPosition["Json"];
+      const userData = JSON.parse(userDataPre);
 
-          const isMatch = bcrypt.compareSync(password, userBParseado.Login[0].Pass_Hash);            
+      const isMatch = bcrypt.compareSync(password, passwordHasheado);
 
-          if(isMatch) {             
-            const token = this.getJWT({id:  userBParseado.Login[0].Personas_Id, dni: dni});
-            return {
-              ok: true,
-              token,
-              user: userBParseado.Login[0],
-              userData: parseado
-            }
-          } else {     
-            throw new UnauthorizedException({
-              ok:false,
-              message: 'Credenciales inválidas'
-            });    
-         
-        }   
-    };
+      if(isMatch) {             
+        const token = this.getJWT({id:  userData.Persona[0].Id, dni: dni});
+        return {
+          ok: true,
+          token,
+          userData: userData
+        }
+      } else {     
+        throw new UnauthorizedException({
+          ok:false,
+          message: 'Credenciales inválidas'
+        });        
+      }       
   }
 
 
   async perfilCompleto(Documento: string) {
     const userCompleto = await this.prismaService.$queryRaw`
-          EXEC sp_Perfil_completo @Documento = ${Documento};
+          EXEC sp_Perfil_completo_detallado @Documento = ${Documento};
         `;
-        const userComplete = userCompleto[0]
+        
+        /* const userComplete = userCompleto[0]
         const userParseado = userComplete["JSON_F52E2B61-18A1-11d1-B105-00805F49916B"]
 
-        const userParseadoJson = JSON.parse(userParseado)
+        const userParseadoJson = JSON.parse(userParseado) */
 
-        return userParseadoJson   
+        return userCompleto   
   }
 
   private getJWT( payload: JwtPayload) {
@@ -108,76 +100,46 @@ export class AuthService {
   
  
 
-  async register(createUserDto: CreateUserDto): Promise<any> {
+async register(createUserDto: CreateUserDto): Promise<any> {
+  try {
+    const rawResponse= await this.perfilCompleto(createUserDto.dni);
+      const userPosition = rawResponse[0];
+      const userDataPre= userPosition["Json"];
+      const userData = JSON.parse(userDataPre);
+      
+    if(userData.Persona[0].Usuario_Registrado === true ) return new  BadRequestException(`Usuario ya registrado`)
     
-    try {
-      const rawResponse: any[] = await this.prismaService.$queryRaw`
-        EXEC dbo.sp_Perfil_Login @Documento = ${createUserDto.dni};        
-      `              
-    
-      if (rawResponse && rawResponse.length > 0) {
-
-        const loginResponse = rawResponse[0];          
-        
-        const jsonLogin = loginResponse["JSON_F52E2B61-18A1-11d1-B105-00805F49916B"]; 
-
-        
-        const responseLOginParseado = JSON.parse(jsonLogin)
-        
-
-        const { password } = createUserDto;
-
-        const passwordHash = bcrypt.hashSync(password, 10);        
-
-        const register = await this.prismaService.$queryRaw`
-          EXEC dbo.sis_Usuarios_IN
-             @Personas_Id = ${responseLOginParseado.Login[0].Personas_Id},
-             @Usuario = ${createUserDto.dni},
-             @Pass_Hash = ${passwordHash}
-        `
-        
-        
-
-        const token = this.getJWT({
-          id: responseLOginParseado.Login[0].Personas_Id,
-          dni: createUserDto.dni
-        })
-
-       /*  const contactInCelular = await this.prismaService.$queryRaw`
-          EXEC Personas_Contacto_IN
-             @Personas_Id = ${responseLOginParseado.Login[0].Personas_Id},
-             @Tipo_Contacto_Id = ${2},
-             @Personas_Contacto_Detalle = ${createUserDto.telefono},
-             @Observaciones = ''
-        `
-        const contactInEmail = await this.prismaService.$queryRaw`
-          EXEC Personas_Contacto_IN
-             @Personas_Id = ${responseLOginParseado.Login[0].Personas_Id},
-             @Tipo_Contacto_Id = ${3},
-             @Personas_Contacto_Detalle = ${createUserDto.email},
-             @Observaciones = ''
-        ` */
-
-        const userData = await this.perfilCompleto(createUserDto.dni);
-        
-
-        return {
-          ok: true,
-          token,
-          userData
-        }              
-        
-      } else {
-        // Si no se devuelve ninguna fila (ej. no se encontró el documento, o error interno del SP antes del SELECT final)
-        return {
-          message: "no se encontro usuario con ese dni"
-        }; // O lanzar una excepción específica
-      }
-
-    } catch (error) {
-      throw new  BadRequestException(`Usuario no encontrado: ${error}`)
+    if (rawResponse && userData.Persona[0].Id > 0) {  
+      const id = userData.Persona[0].Id;
+      const { password } = createUserDto;
+      const passwordHash = bcrypt.hashSync(password, 10);
+      const register = await this.prismaService.$queryRaw`
+        EXEC sis_Usuarios_IN
+            @Personas_Id = ${id},
+            @Pass_Hash = ${passwordHash}
+      `
+      
+      
+      const token = this.getJWT({
+        id: id,
+        dni: createUserDto.dni
+      })      
+              
+      return {
+        ok: true,
+        token,
+        userData
+      }                      
+    } else {
+      // Si no se devuelve ninguna fila (ej. no se encontró el documento, o error interno del SP antes del SELECT final)
+      return {
+        message: "no se encontro usuario con ese dni"
+      }; // O lanzar una excepción específica
     }
+  } catch (error) {
+    throw new  BadRequestException(`Usuario no encontrado: ${error}`)
   }
+}
 
   async createPersona(persona: any) {
     const { nombre, apellido, dni, fechaNacimiento, tipodni } = persona
@@ -190,7 +152,6 @@ export class AuthService {
                               @Fecha_Nacimiento = ${fechaNacimiento},
                               @Activo = ${false}
       `;  
-      console.log(response);
       
       return response[0]
     } catch (error) {
@@ -367,25 +328,18 @@ export class AuthService {
   }
 
   async obtenerPersonaPorDni(dni: string): Promise<any> {
-    const result: any[] = await this.prismaService.$queryRaw`EXEC dbo.sp_Perfil_Login @Documento = ${dni};`;
+    const rawResponse= await this.perfilCompleto(dni);
+      const userPosition = rawResponse[0];
+      const userDataPre= userPosition["Json"];
+      const userData = JSON.parse(userDataPre);
 
-    
-    const userLogin = result[0];
-    const userLoginB = userLogin["JSON_F52E2B61-18A1-11d1-B105-00805F49916B"];
-    const userBParseado = JSON.parse(userLoginB)
-
-    if (result && result.length > 0 && userBParseado.Login[0]) {
-      return {
-        ok: true,
-        userId : userBParseado.Login[0].Personas_Id
-      } 
-    } else {
-      return {
-        ok: false
+      if(userData.Persona[0].Usuario_Registrado === true || []){
+        return {
+          ok: false
+        }
+      } else {
+        return userData                               
       }
-    }
-
-                               
   }
 
 
@@ -478,44 +432,32 @@ export class AuthService {
     }
   }
 
-  async checkAuthStatus(user: any) {    
-    
-    
-    
-    
-    const User: any[] = await this.prismaService.$queryRaw`
-        EXEC dbo.sp_Perfil_Login @Documento = ${user.Persona[0].Documento};
-      `;
+  async checkAuthStatus(user: any) {
+    const rawResponse= await this.perfilCompleto(user.Persona[0].Documento);
+      const userPosition = rawResponse[0];
+      const userDataPre= userPosition["Json"];
+      const userData = JSON.parse(userDataPre);
 
-      const userLogin = User[0];
-      const userLoginB = userLogin["JSON_F52E2B61-18A1-11d1-B105-00805F49916B"];
-      const userBParseado = JSON.parse(userLoginB)
-
-      
-      
-
-        
     return {
       ok: true,
       token: this.getJWT({id: user.Id, dni: user.Persona[0].Documento}),
-      user: userBParseado.Login[0],
-      userData: user,
+      userData: userData,
     }
   }
 
   // En tu auth.service.ts
 // En tu auth.service.ts
 async getProfileImage(id: number): Promise<Buffer> {
-    // Usa $queryRaw con template literals etiquetados
-    const result = await this.prismaService.$queryRaw`
-        EXEC Personas_foto_OU @Id = ${id};
-    ` as any[];
+   // Usa $queryRaw con template literals etiquetados
+     const result = await this.prismaService.$queryRaw`
+      EXEC Personas_foto_OU @Id = ${id};
+   ` as any[];
 
-    if (!result || result.length === 0 || !result[0].Foto_1) {
-      throw new NotFoundException('Imagen no encontrada');
-    }
+   if (!result || result.length === 0 || !result[0].Foto_1) {
+   throw new NotFoundException('Imagen no encontrada');
+   }
 
-    return result[0].Foto_1;
+   return result[0].Foto_1;
 }
           
   
