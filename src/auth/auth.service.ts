@@ -106,6 +106,9 @@ async register(createUserDto: CreateUserDto): Promise<any> {
       const userPosition = rawResponse[0];
       const userDataPre= userPosition["Json"];
       const userData = JSON.parse(userDataPre);
+
+      console.log(userData);
+      
       
     if(userData.Persona[0].Usuario_Registrado === true ) return new  BadRequestException(`Usuario ya registrado`)
     
