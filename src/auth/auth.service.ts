@@ -85,10 +85,7 @@ export class AuthService {
           EXEC sp_Perfil_completo_detallado @Documento = ${Documento};
         `;
         
-        /* const userComplete = userCompleto[0]
-        const userParseado = userComplete["JSON_F52E2B61-18A1-11d1-B105-00805F49916B"]
-
-        const userParseadoJson = JSON.parse(userParseado) */
+  
 
         return userCompleto   
   }
@@ -96,9 +93,7 @@ export class AuthService {
   private getJWT( payload: JwtPayload) {
     const token = this.jwtService.sign( payload );
     return token;
-  }
-  
- 
+  } 
 
 async register(createUserDto: CreateUserDto): Promise<any> {
   try {
@@ -106,13 +101,9 @@ async register(createUserDto: CreateUserDto): Promise<any> {
       const userPosition = rawResponse[0];
       const userDataPre= userPosition["Json"];
       const userData = JSON.parse(userDataPre);
-
-      console.log(userData);
-      
-      
-    if(userData.Persona[0].Usuario_Registrado === true ) return new  BadRequestException(`Usuario ya registrado`)
+      const {dni, email, telefono} = createUserDto
     
-    if (rawResponse && userData.Persona[0].Id > 0) {  
+    if (userData.Persona[0].Documento === dni && userData.Login[0].celular === telefono && userData.Login[0].login_email === email) {  
       const id = userData.Persona[0].Id;
       const { password } = createUserDto;
       const passwordHash = bcrypt.hashSync(password, 10);
@@ -136,7 +127,7 @@ async register(createUserDto: CreateUserDto): Promise<any> {
     } else {
       // Si no se devuelve ninguna fila (ej. no se encontró el documento, o error interno del SP antes del SELECT final)
       return {
-        message: "no se encontro usuario con ese dni"
+        message: "verifique los datos ingresados"
       }; // O lanzar una excepción específica
     }
   } catch (error) {
@@ -330,19 +321,21 @@ async register(createUserDto: CreateUserDto): Promise<any> {
     return isMatch;
   }
 
-  async obtenerPersonaPorDni(dni: string): Promise<any> {
-    const rawResponse= await this.perfilCompleto(dni);
+  async obtenerPersonaPorDni(dni: string, email:string, telefono:string): Promise<any> {
+    const rawResponse: any = await this.perfilCompleto(dni);
       const userPosition = rawResponse[0];
       const userDataPre= userPosition["Json"];
-      const userData = JSON.parse(userDataPre);
+      const userData = JSON.parse(userDataPre);     
 
-      if(userData.Persona[0].Usuario_Registrado === true || []){
-        return {
-          ok: false
-        }
-      } else {
-        return userData                               
+      if (userData.Login[0]?.Usuario_Registrado === false && userData.Login[0]?.login_email === email && userData.Login[0]?.celular === telefono) {         
+         return {
+          ok: true,
+          userData
+         }
       }
+      return { 
+        ok:false          
+      };      
   }
 
 

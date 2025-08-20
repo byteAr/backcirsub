@@ -4,14 +4,17 @@ export class CreateUserDto {
 
     
 
-   
+    @IsString()
+    email: string;
 
 
     @IsString()
     @MinLength(8)
     dni: string;
 
-    
+    @IsString()
+    @MinLength(8)
+    telefono: string
 
     @IsString()
     @MinLength(6)
