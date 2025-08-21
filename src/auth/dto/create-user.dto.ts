@@ -1,20 +1,13 @@
 import { IsEmail, isNumber, IsNumber, IsString, Matches, MaxLength, MinLength } from "class-validator";
 
-export class CreateUserDto {
-
-    
-
-    @IsString()
-    email: string;
+export class CreateUserDto {    
 
 
     @IsString()
     @MinLength(8)
     dni: string;
 
-    @IsString()
-    @MinLength(8)
-    telefono: string
+    
 
     @IsString()
     @MinLength(6)

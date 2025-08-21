@@ -95,25 +95,29 @@ export class AuthService {
     return token;
   } 
 
-async register(createUserDto: CreateUserDto): Promise<any> {
+async register(createUserDto: CreateUserDto): Promise<any> {  
+
+  const{dni, password} = createUserDto
+  
+  
   try {
     const rawResponse= await this.perfilCompleto(createUserDto.dni);
       const userPosition = rawResponse[0];
       const userDataPre= userPosition["Json"];
       const userData = JSON.parse(userDataPre);
-      const {dni, email, telefono} = createUserDto
+      const {dni, password} = createUserDto
     
-    if (userData.Persona[0].Documento === dni && userData.Login[0].celular === telefono && userData.Login[0].login_email === email) {  
+    if (userData.Persona[0].Documento === dni) {       
+      
       const id = userData.Persona[0].Id;
       const { password } = createUserDto;
-      const passwordHash = bcrypt.hashSync(password, 10);
+      const passwordHash = bcrypt.hashSync(password, 10); 
       const register = await this.prismaService.$queryRaw`
-        EXEC sis_Usuarios_IN
+        EXEC sp_sis_Usuarios_Hash_AC
             @Personas_Id = ${id},
             @Pass_Hash = ${passwordHash}
-      `
-      
-      
+        `
+           
       const token = this.getJWT({
         id: id,
         dni: createUserDto.dni
@@ -327,7 +331,7 @@ async register(createUserDto: CreateUserDto): Promise<any> {
       const userDataPre= userPosition["Json"];
       const userData = JSON.parse(userDataPre);     
 
-      if (userData.Login[0]?.Usuario_Registrado === false && userData.Login[0]?.login_email === email && userData.Login[0]?.celular === telefono) {         
+      if (userData.Login[0]?.Usuario_Registrado === true && userData.Login[0]?.login_email === email && userData.Login[0]?.celular === telefono) {         
          return {
           ok: true,
           userData

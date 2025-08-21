@@ -119,7 +119,8 @@ export class AuthController {
   }
 
   @Post('verify-dni')
-  verifyDni(@Body('dni') dni:string, @Body('email') email:string, @Body('telefono') telefono:string){       
+  verifyDni(@Body('dni') dni:string, @Body('email') email:string, @Body('telefono') telefono:string){  
+         
     return this.authService.obtenerPersonaPorDni( dni, email, telefono)
   }
 
