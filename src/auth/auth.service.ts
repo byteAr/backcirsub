@@ -331,7 +331,7 @@ async register(createUserDto: CreateUserDto): Promise<any> {
       const userDataPre= userPosition["Json"];
       const userData = JSON.parse(userDataPre);     
 
-      if (userData.Login[0]?.Usuario_Registrado === true && userData.Login[0]?.login_email === email && userData.Login[0]?.celular === telefono) {         
+      if (userData.Login[0]?.Usuario_Registrado === false && userData.Login[0]?.login_email === email && userData.Login[0]?.celular === telefono) {         
          return {
           ok: true,
           userData
