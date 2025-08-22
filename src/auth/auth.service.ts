@@ -179,128 +179,6 @@ async register(createUserDto: CreateUserDto): Promise<any> {
     return false;
   }
 
-  async resetOrCreatePassword(passwordUserDto: passwordUser): Promise<any> {
-    const { password, id: personasId } = passwordUserDto; // Renombramos 'id' a 'personasId' para mayor claridad
-
-    try {
-      const saltRounds = 10;
-      const salt = await bcrypt.genSalt(saltRounds);
-      const hashedPassword = await bcrypt.hash(password, salt);
-
-      // 1. Intentar encontrar un usuario existente en sis_Usuarios para este Personas_Id
-      let existingUser = await this.prismaService.sis_Usuarios.findUnique({
-        where: {
-          Personas_Id: personasId,
-        },
-      });
-
-      let updatedOrCreatedUser;
-
-      if (existingUser) {
-        // 2. Si el usuario ya existe, actualizar su contraseña
-        updatedOrCreatedUser = await this.prismaService.sis_Usuarios.update({
-          where: {
-            Personas_Id: personasId,
-          },
-          data: {
-            Pass_Hash: hashedPassword,
-            Pass_Salt: salt,
-            Fecha_Cambio_Clave: new Date(),
-            ULTIMA_MODIFICACION_: new Date(),
-            Bloqueado: false,     // Desbloquear
-            Intentos_Fallidos: 0, // Resetear intentos
-            Activo: true,         // Activar
-          },
-          select: {
-            Id: true,
-            Usuario: true,
-            Fecha_Cambio_Clave: true,
-            ULTIMA_MODIFICACION_: true,
-            Personas_Id: true,
-          },
-        });
-        console.log(`Contraseña actualizada para el usuario ${updatedOrCreatedUser.Usuario} (Personas_Id: ${updatedOrCreatedUser.Personas_Id})`);
-
-      } else {
-        // 3. Si el usuario NO existe, primero debemos verificar que la Persona sí exista
-        const personaExists = await this.prismaService.personas.findUnique({
-          where: {
-            Id: personasId,
-          },
-        });
-
-        if (!personaExists) {
-          // Si la Persona ni siquiera existe, lanzar un error.
-          throw new NotFoundException(`La Persona con ID ${personasId} no fue encontrada en la base de datos.`);
-        }
-
-        // Crear un nombre de usuario por defecto o basado en alguna lógica (ej. DNI, email)
-        // Esto es CRUCIAL. El campo 'Usuario' en sis_Usuarios es @unique y NOT NULL.
-        // Necesitas una forma de generar un 'Usuario' si no existe.
-        // Por ejemplo, podrías usar el DNI de la persona o un email.
-        // Si el DNI es String, puedes usarlo directamente. Si es numérico, convertirlo.
-        const personaDni = personaExists.Documento; // Asumiendo que el Documento de Persona es el DNI
-        const defaultUsername = `user_${personaDni}`; // O alguna otra lógica para el nombre de usuario
-
-        // Verificar si el nombre de usuario por defecto ya existe para evitar errores UNIQUE
-        const usernameExists = await this.prismaService.sis_Usuarios.findUnique({
-            where: {
-                Usuario: defaultUsername
-            }
-        });
-
-        // Si el username por defecto ya existe, puedes generar uno diferente
-        // o lanzar un error pidiendo un username explícito.
-        // Para simplificar, aquí generaremos uno con timestamp si ya existe.
-        let finalUsername = defaultUsername;
-        if (usernameExists) {
-            finalUsername = `${defaultUsername}_${Date.now()}`;
-        }
-
-
-        // Ahora, crear el nuevo registro en sis_Usuarios
-        updatedOrCreatedUser = await this.prismaService.sis_Usuarios.create({
-          data: {
-            Personas_Id: personasId, // Vincula al Id de la tabla Personas
-            Usuario: finalUsername, // Se necesita un nombre de usuario. Define una lógica para esto.
-            Pass_Hash: hashedPassword,
-            Pass_Salt: salt,
-            Fecha_Creacion: new Date(),
-            Fecha_Cambio_Clave: new Date(),
-            Activo: true,
-            Bloqueado: false,
-            Intentos_Fallidos: 0,
-            ULTIMA_MODIFICACION_: new Date(),
-          },
-          select: {
-            Id: true,
-            Usuario: true,
-            Fecha_Creacion: true,
-            Fecha_Cambio_Clave: true,
-            ULTIMA_MODIFICACION_: true,
-            Personas_Id: true,
-          },
-        });
-        console.log(`Nuevo usuario creado y contraseña establecida para ${updatedOrCreatedUser.Usuario} (Personas_Id: ${updatedOrCreatedUser.Personas_Id})`);
-      }
-
-      return updatedOrCreatedUser;
-
-    } catch (error) {
-      console.error('Error en AuthService.resetOrCreatePassword:', error);
-      // PrismaClientKnownRequestError con código P2025 es el que esperabas para 'update'
-      // Ahora este error debería ser menos frecuente si el flujo es "crear si no existe".
-      if (error.code === 'P2025') {
-        // Este caso solo debería ocurrir si el Personas_Id no se encontrara en el 'update'
-        // después de que findUnique lo haya encontrado, lo cual sería muy inusual.
-        // Si Personas_Id no es único en sis_Usuarios, entonces findUnique/findFirst es problemático.
-        // Según tu schema, Personas_Id ES único en sis_Usuarios.
-        throw new NotFoundException(`No se pudo encontrar el registro de usuario asociado al ID de Persona ${personasId}.`);
-      }
-      // Re-lanzar el error para que el controlador lo maneje
-      throw error; // Lanza el error original (ej. NotFoundException o error genérico)
-    }
-  }
 
 
   async verifyPassword(usuario: string, plainPasswordAttempt: string): Promise<boolean> {
@@ -341,6 +219,77 @@ async register(createUserDto: CreateUserDto): Promise<any> {
         ok:false          
       };      
   }
+
+  async obtenerPersonaPorDniRecoveryPass(dni: string, email:string, telefono:string): Promise<any> {
+    const rawResponse: any = await this.perfilCompleto(dni);
+      const userPosition = rawResponse[0];
+      const userDataPre= userPosition["Json"];
+      const userData = JSON.parse(userDataPre);     
+
+      if (userData.Login[0]?.login_email === email && userData.Login[0]?.celular === telefono) {         
+         return {
+          ok: true,
+          userData
+         }
+      }
+      return { 
+        ok:false          
+      };      
+  }
+
+  async resetPass(id: number, password: string) {
+      const passHash = await bcrypt.hash(password, 10);
+
+        const rows = await this.prismaService.$queryRaw<any[]>`
+          EXEC dbo.sp_sis_Usuarios_Hash_AC
+            @Personas_Id = ${id},
+            @Pass_Hash   = ${passHash}
+        `;
+
+        const row = rows?.[0];
+        if (!row) return { ok: false, code: null, message: 'Sin filas del SP' };
+
+        // toma el primer valor de la fila (la columna no tiene nombre)
+        let val: unknown = Object.values(row)[0];
+        if (val instanceof Buffer) val = val.toString('utf8');
+
+        let str = String(val ?? '').trim().replace(/^\uFEFF/, ''); // quita BOM
+
+        // des-escapa si viene entrecomillado (puede necesitar 1 o 2 pasadas)
+        for (let i = 0; i < 2; i++) {
+          if (str.startsWith('"') && str.endsWith('"')) {
+            try { str = JSON.parse(str); } catch { break; }
+          }
+        }
+
+        // si es el fragmento sin llaves, envuélvelo
+        if (str && !/^\s*\{/.test(str) && /"Codigo"\s*:/.test(str)) {
+          str = `{${str}}`;
+        }
+
+        let payload: any = null;
+        try { payload = JSON.parse(str); } catch { /* sigue abajo */ }
+
+        if (!payload) {
+          // último intento: extraer con regex
+          const codeM = /"Codigo"\s*:\s*"?(?<code>-?\d+)/i.exec(str);
+          const msgM  = /"Mensaje"\s*:\s*"(?<msg>[^"]*)/i.exec(str);
+          const code  = codeM ? Number(codeM.groups!.code) : null;
+          const msg   = msgM ? msgM.groups!.msg : '';
+          return { ok: code != null ? code > 0 : false, code, message: msg, raw: str };
+        }
+
+        const code = Number(payload.Codigo ?? payload.codigo ?? payload.Code ?? payload.code);
+        const message = String(payload.Mensaje ?? payload.mensaje ?? payload.Message ?? payload.message ?? '');
+
+        return {
+          ok: Number.isFinite(code) ? code > 0 : false,
+          code: Number.isFinite(code) ? code : null,
+          message,
+        };
+
+    }
+
 
 
   async prueba(Documento: string){

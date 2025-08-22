@@ -102,9 +102,8 @@ export class AuthController {
 
   @Post('resetPassword')
   resetPassword(@Body() passwordUser: passwordUser){
-    const {id, password} = passwordUser;
-    
-    return this.authService.resetOrCreatePassword( passwordUser)
+    const {id, password} = passwordUser;    
+    return this.authService.resetPass( id, password)
   }
 
   @Post('prueba')
@@ -122,6 +121,12 @@ export class AuthController {
   verifyDni(@Body('dni') dni:string, @Body('email') email:string, @Body('telefono') telefono:string){  
          
     return this.authService.obtenerPersonaPorDni( dni, email, telefono)
+  }
+
+  @Post('verify-repass')
+  verifyDniRecoveryPass(@Body('dni') dni:string, @Body('email') email:string, @Body('telefono') telefono:string){  
+         
+    return this.authService.obtenerPersonaPorDniRecoveryPass( dni, email, telefono)
   }
 
   @Post('upload-profileimage')
