@@ -220,6 +220,23 @@ async register(createUserDto: CreateUserDto): Promise<any> {
       };      
   }
 
+  async postEncuesta(id: number, servicio: number, atencion: number) {
+    console.log(id, servicio, atencion);
+    
+    try {
+      const response:any = await this.prismaService.$queryRaw`
+        EXEC log_Encuesta_IN
+                               @Personas_Id = ${id},
+                              @califica_servicio = ${servicio}, 
+                              @califica_atencion =${atencion}
+      `;
+      return { ok:true }      
+    } catch (error) {
+      console.log(error);
+      return new BadRequestException(error);      
+    }
+  }
+
   async obtenerPersonaPorDniRecoveryPass(dni: string, email:string, telefono:string): Promise<any> {
     const rawResponse: any = await this.perfilCompleto(dni);
       const userPosition = rawResponse[0];
