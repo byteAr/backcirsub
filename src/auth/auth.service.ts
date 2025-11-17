@@ -256,6 +256,7 @@ async register(createUserDto: CreateUserDto): Promise<any> {
 
   async resetPass(id: number, password: string) {
       const passHash = await bcrypt.hash(password, 10);
+      console.log("password hasheado", passHash, id);
 
         const rows = await this.prismaService.$queryRaw<any[]>`
           EXEC dbo.sp_sis_Usuarios_Hash_AC
@@ -416,14 +417,12 @@ async register(createUserDto: CreateUserDto): Promise<any> {
 async getProfileImage(id: number): Promise<Buffer> {
    // Usa $queryRaw con template literals etiquetados
      const result = await this.prismaService.$queryRaw`
-      EXEC Personas_foto_OU @Id = ${id};
+      EXEC sp_Personas_foto_OU @Personas_Id = ${id};
    ` as any[];
-
-   if (!result || result.length === 0 || !result[0].Foto_1) {
+   if (!result || result.length === 0 || !result[0].Foto) {
    throw new NotFoundException('Imagen no encontrada');
    }
-
-   return result[0].Foto_1;
+   return result[0].Foto;
 }
           
   
