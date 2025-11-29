@@ -46,6 +46,8 @@ export class AuthService {
   async login(loginUserDto: LoginUserDto){
 
     const {dni, password } = loginUserDto;
+    console.log(dni, password);
+    
 
     if(!dni) return;
           
@@ -61,6 +63,11 @@ export class AuthService {
       const userPosition = rawResponse[0];
       const userDataPre= userPosition["Json"];
       const userData = JSON.parse(userDataPre);
+
+      console.log("esta es la respuesta parseada", userData);
+
+
+      
 
       const isMatch = bcrypt.compareSync(password, passwordHasheado);
 
@@ -399,18 +406,18 @@ async register(createUserDto: CreateUserDto): Promise<any> {
     }
   }
 
-  async checkAuthStatus(user: any) {
-    const rawResponse= await this.perfilCompleto(user.Persona[0].Documento);
-      const userPosition = rawResponse[0];
-      const userDataPre= userPosition["Json"];
-      const userData = JSON.parse(userDataPre);
+  async checkAuthStatus(user: { id: number; dni: string }) {
+  const rawResponse = await this.perfilCompleto(user.dni);
+  const userPosition = rawResponse[0];
+  const userDataPre = userPosition["Json"];
+  const userData = JSON.parse(userDataPre);
 
-    return {
-      ok: true,
-      token: this.getJWT({id: user.Id, dni: user.Persona[0].Documento}),
-      userData: userData,
-    }
-  }
+  return {
+    ok: true,
+    token: this.getJWT({ id: user.id, dni: user.dni }),
+    userData,
+  };
+}
 
   // En tu auth.service.ts
 // En tu auth.service.ts
