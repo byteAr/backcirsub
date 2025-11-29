@@ -357,7 +357,7 @@ async register(createUserDto: CreateUserDto): Promise<any> {
     request.input('Foto_1', sql.VarBinary(sql.MAX), file.buffer);
     request.input('Activo', sql.Bit, true);
 
-    const result = await request.execute('Personas_foto_IN');
+    const result = await request.execute('sp_Personas_foto_IN');
 
     return {
       ok: true,
