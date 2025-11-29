@@ -358,6 +358,7 @@ async register(createUserDto: CreateUserDto): Promise<any> {
     request.input('Activo', sql.Bit, true);
 
     const result = await request.execute('sp_Personas_foto_IN');
+    console.log("Este es lo que devuelve el procedimiento al hacer foto", result)
 
     return {
       ok: true,
