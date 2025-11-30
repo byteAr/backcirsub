@@ -15,6 +15,9 @@ services:
     # Carga todas las variables de entorno desde el archivo .env
     env_file:
       - ./.env 
+    
+    environment:
+      REDIS_HOST: redis
 
     # Asegura que Redis se inicie y esté "sano" antes que cirsubbackend
     depends_on:
@@ -31,6 +34,8 @@ services:
     command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"} # Establece la contraseña y persistencia AOF, solo si REDIS_PASSWORD no está vacío
     volumes:
       - redis_data:/data
+    ports:
+      - "6379:6379"
     healthcheck: # Healthcheck para Redis
       test: ["CMD", "redis-cli", "--raw", "GET", "healthcheck"] # Un simple test de salud
       interval: 5s

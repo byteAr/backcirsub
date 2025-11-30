@@ -57,7 +57,11 @@ export class AuthService {
 
       const passwordHasheado = User[0].Pass_Hash
     
-      if (User.length <= 0) return
+      if (User.length <= 0) {
+        console.log("usuario no encontrado")
+        return
+      }
+        
 
       const rawResponse= await this.perfilCompleto(loginUserDto.dni);
       const userPosition = rawResponse[0];
@@ -91,8 +95,7 @@ export class AuthService {
     const userCompleto = await this.prismaService.$queryRaw`
           EXEC sp_Perfil_completo_detallado @Documento = ${Documento};
         `;
-        
-  
+      console.log('esto es lo que devuelve al consultar por el dni', userCompleto)
 
         return userCompleto   
   }
@@ -104,8 +107,7 @@ export class AuthService {
 
 async register(createUserDto: CreateUserDto): Promise<any> {  
 
-  const{dni, password} = createUserDto
-  
+  const{dni, password} = createUserDto  
   
   try {
     const rawResponse= await this.perfilCompleto(createUserDto.dni);
@@ -216,15 +218,36 @@ async register(createUserDto: CreateUserDto): Promise<any> {
       const userDataPre= userPosition["Json"];
       const userData = JSON.parse(userDataPre);     
 
-      if (userData.Login[0]?.Usuario_Registrado === false && userData.Login[0]?.login_email === email && userData.Login[0]?.celular === telefono) {         
-         return {
-          ok: true,
-          userData
-         }
-      }
-      return { 
-        ok:false          
-      };      
+      console.log('esta es la respuesta al obtener persona por dni',userData);
+
+      const loginVacio =
+  !Array.isArray(userData.Login) || userData.Login.length === 0;
+
+const usuarioNoRegistrado =
+  userData.Login?.[0]?.Usuario_Registrado === false;
+
+console.log('Login vacío:', loginVacio);
+console.log('Usuario no registrado:', usuarioNoRegistrado);
+
+if (loginVacio) {
+  return {
+    ok: true,
+    userData,
+  };
+}
+
+if (
+  usuarioNoRegistrado &&
+  userData.Login?.[0]?.login_email === email &&
+  userData.Login?.[0]?.celular === telefono
+) {
+  return {
+    ok: true,
+    userData,
+  };
+}
+
+return { ok: false }; 
   }
 
   async postEncuesta(id: number, servicio: number, atencion: number) {
@@ -342,6 +365,7 @@ async register(createUserDto: CreateUserDto): Promise<any> {
   try {
     // ✅ Verificación de rostro visible, completo y confiable
     const isValid = await this.awsRekognitionService.validateSingleFaceVisible(file.buffer);
+    
 
     if (!isValid) {
       return {
