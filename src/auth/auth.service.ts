@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException, UnauthorizedException  } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, InternalServerErrorException, Logger, NotFoundException, UnauthorizedException  } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
 import { CreateUserDto } from './dto/create-user.dto';
@@ -29,6 +29,15 @@ const sqlConfig: sql.config = {
   }
 };
 
+interface SpHashResponse {
+  ok: boolean;
+  codigo: number;
+  mensaje: string;
+  http: number;
+  ts: string;
+  id: number;
+}
+
 @Injectable()
 export class AuthService {
   
@@ -43,61 +52,155 @@ export class AuthService {
     private readonly awsRekognitionService: AwsRekognitionService,
    ){}
 
-  async login(loginUserDto: LoginUserDto){
+  async login(loginUserDto: LoginUserDto, ip?: string) {
+    const { dni, password } = loginUserDto;
 
-    const {dni, password } = loginUserDto;
-    console.log(dni, password);
-    
+    try {
+      // Validaciones básicas
+      if (!dni || !password) {
+        await this.registrarLog(
+          'USUARIOS',
+          'WARN',
+          'Login usuario',
+          `Intento de login con datos incompletos (dni o password vacío)`,
+          null,
+          ip,
+        );
+        throw new BadRequestException('DNI y contraseña son obligatorios');
+      }
 
-    if(!dni) return;
-          
-      const User: any[] = await this.prismaService.$queryRaw`
+      // Llamada al SP de login
+      const users: any[] = await this.prismaService.$queryRaw`
         EXEC sp_Login @Documento = ${dni};
       `;
 
-      const passwordHasheado = User[0].Pass_Hash
-    
-      if (User.length <= 0) {
-        console.log("usuario no encontrado")
-        return
+      if (!users || users.length === 0) {
+        await this.registrarLog(
+          'USUARIOS',
+          'WARN',
+          'Login usuario',
+          `Usuario no encontrado para documento ${dni}`,
+          null,
+          ip,
+        );
+        throw new UnauthorizedException({
+          ok: false,
+          message: 'Credenciales inválidas',
+        });
       }
-        
 
-      const rawResponse= await this.perfilCompleto(loginUserDto.dni);
+      const user = users[0];
+      const passwordHasheado = user.Pass_Hash;
+
+      // Comparación de password
+      const isMatch = await bcrypt.compare(password, passwordHasheado);
+
+      if (!isMatch) {
+        await this.registrarLog(
+          'USUARIOS',
+          'ERROR',
+          'Login usuario',
+          `Password incorrecto para documento ${dni}`,
+          null,
+          ip,
+        );
+        throw new UnauthorizedException({
+          ok: false,
+          message: 'Credenciales inválidas',
+        });
+      }
+
+      // Si el login es correcto, armamos el perfil
+      const rawResponse = await this.perfilCompleto(dni);
       const userPosition = rawResponse[0];
-      const userDataPre= userPosition["Json"];
+      const userDataPre = userPosition['Json'];
       const userData = JSON.parse(userDataPre);
 
-      console.log("esta es la respuesta parseada", userData);
+      const token = this.getJWT({
+        id: userData.Persona[0].Id,
+        dni,
+      });
 
+      // Log de éxito
+      await this.registrarLog(
+        'USUARIOS',
+        'INFO',
+        'Login usuario',
+        `Login OK para documento ${dni}`,
+        dni,
+        ip,
+      );
 
-      
+      return {
+        ok: true,
+        token,
+        userData,
+      };
+    } catch (error: any) {
+      // Si ya es una HttpException (BadRequest, Unauthorized, etc.), sólo logueamos y relanzamos
+      if (error instanceof HttpException) {
+        await this.registrarLog(
+          'USUARIOS',
+          'ERROR',
+          'Login usuario',
+          `Error controlado en login para documento ${dni}: ${error.message}`,
+          dni ?? null,
+          ip,
+        );
+        throw error;
+      }
 
-      const isMatch = bcrypt.compareSync(password, passwordHasheado);
+      // Error inesperado
+      await this.registrarLog(
+        'USUARIOS',
+        'ERROR',
+        'Login usuario',
+        `Error inesperado en login para documento ${dni}: ${error?.message ?? error}`,
+        dni ?? null,
+        ip,
+      );
 
-      if(isMatch) {             
-        const token = this.getJWT({id:  userData.Persona[0].Id, dni: dni});
-        return {
-          ok: true,
-          token,
-          userData: userData
-        }
-      } else {     
-        throw new UnauthorizedException({
-          ok:false,
-          message: 'Credenciales inválidas'
-        });        
-      }       
+      throw new InternalServerErrorException(
+        'Ha ocurrido un error al intentar iniciar sesión',
+      );
+    }
+  }
+
+  /**
+   * Envía el registro al SP de logging sp_sis_log_in
+   */
+  private async registrarLog(
+    modulo: string,
+    tipo: 'INFO' | 'WARN' | 'ERROR',
+    accion: string,
+    observacion: string,
+    usuario?: string | null,
+    ip?: string | null,
+  ) {
+    // Si no tenemos usuario o IP, dejamos que el SP los guarde como '' cuando recibe NULL
+    const usuarioParam = usuario ?? null;
+    const ipParam = ip ?? null;
+
+    await this.prismaService.$executeRaw`
+      EXEC dbo.sp_sis_log_in 
+        @Modulo      = ${modulo},
+        @Tipo        = ${tipo},
+        @Accion      = ${accion},
+        @Observacion = ${observacion},
+        @Usuario     = ${usuarioParam},
+        @Ip          = ${ipParam};
+    `;
   }
 
 
-  async perfilCompleto(Documento: string) {
-    const userCompleto = await this.prismaService.$queryRaw`
-          EXEC sp_Perfil_completo_detallado @Documento = ${Documento};
-        `;
-      console.log('esto es lo que devuelve al consultar por el dni', userCompleto)
+  async perfilCompleto(Documento: string): Promise<any[]> {
+    const userCompleto = await this.prismaService.$queryRaw<any[]>`
+      EXEC sp_Perfil_completo_detallado @Documento = ${Documento};
+    `;
+    
+    console.log('esto es lo que devuelve al consultar por el dni', userCompleto);
 
-        return userCompleto   
+    return userCompleto;
   }
 
   private getJWT( payload: JwtPayload) {
@@ -105,46 +208,219 @@ export class AuthService {
     return token;
   } 
 
-async register(createUserDto: CreateUserDto): Promise<any> {  
 
-  const{dni, password} = createUserDto  
-  
+
+async register(createUserDto: CreateUserDto): Promise<any> {
+  const { dni, password } = createUserDto;
+
   try {
-    const rawResponse= await this.perfilCompleto(createUserDto.dni);
-      const userPosition = rawResponse[0];
-      const userDataPre= userPosition["Json"];
-      const userData = JSON.parse(userDataPre);
-      const {dni, password} = createUserDto
-    
-    if (userData.Persona[0].Documento === dni) {       
-      
-      const id = userData.Persona[0].Id;
-      const { password } = createUserDto;
-      const passwordHash = bcrypt.hashSync(password, 10); 
-      const register = await this.prismaService.$queryRaw`
-        EXEC sp_sis_Usuarios_Hash_AC
-            @Personas_Id = ${id},
-            @Pass_Hash = ${passwordHash}
-        `
-           
-      const token = this.getJWT({
-        id: id,
-        dni: createUserDto.dni
-      })      
-              
-      return {
-        ok: true,
-        token,
-        userData
-      }                      
-    } else {
-      // Si no se devuelve ninguna fila (ej. no se encontró el documento, o error interno del SP antes del SELECT final)
-      return {
-        message: "verifique los datos ingresados"
-      }; // O lanzar una excepción específica
+    if (!dni || !password) {
+      await this.registrarLog(
+        'USUARIOS',
+        'WARN',
+        'Registro usuario',
+        'Intento de registro con datos incompletos (dni o password vacío)',
+        null,
+        null,
+      );
+      throw new BadRequestException('DNI y contraseña son obligatorios');
     }
-  } catch (error) {
-    throw new  BadRequestException(`Usuario no encontrado: ${error}`)
+
+    const rawResponse = await this.perfilCompleto(dni);
+
+    if (!rawResponse || rawResponse.length === 0) {
+      await this.registrarLog(
+        'USUARIOS',
+        'WARN',
+        'Registro usuario',
+        `No se encontró información de persona en perfilCompleto para documento ${dni}`,
+        dni,
+        null,
+      );
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    const userPosition = rawResponse[0];
+    const userDataPre = userPosition['Json'];
+
+    if (!userDataPre) {
+      await this.registrarLog(
+        'USUARIOS',
+        'ERROR',
+        'Registro usuario',
+        `La respuesta de perfilCompleto no contiene el campo Json para documento ${dni}`,
+        dni,
+        null,
+      );
+      throw new InternalServerErrorException(
+        'Error al obtener los datos del usuario',
+      );
+    }
+
+    let userData: any;
+    try {
+      userData = JSON.parse(userDataPre);
+    } catch (e) {
+      await this.registrarLog(
+        'USUARIOS',
+        'ERROR',
+        'Registro usuario',
+        `Error parseando Json de perfilCompleto para documento ${dni}: ${(e as Error).message}`,
+        dni,
+        null,
+      );
+      throw new InternalServerErrorException(
+        'Error al procesar los datos del usuario',
+      );
+    }
+
+    if (
+      !userData.Persona ||
+      !Array.isArray(userData.Persona) ||
+      userData.Persona.length === 0
+    ) {
+      await this.registrarLog(
+        'USUARIOS',
+        'ERROR',
+        'Registro usuario',
+        `Datos de persona inválidos para documento ${dni} (Persona vacío o inexistente)`,
+        dni,
+        null,
+      );
+      throw new InternalServerErrorException(
+        'Los datos de la persona no están disponibles',
+      );
+    }
+
+    const persona = userData.Persona[0];
+
+    if (!persona.Documento || persona.Documento !== dni) {
+      await this.registrarLog(
+        'USUARIOS',
+        'WARN',
+        'Registro usuario',
+        `El documento de persona (${persona.Documento}) no coincide con el DNI ingresado (${dni})`,
+        dni,
+        null,
+      );
+      throw new BadRequestException('Verifique los datos ingresados');
+    }
+
+    const id = persona.Id;
+
+    // 1) Hashear password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // 2) Llamar al SP que guarda el hash
+    const registerResult: any[] = await this.prismaService.$queryRaw`
+      EXEC sp_sis_Usuarios_Hash_AC
+        @Personas_Id = ${id},
+        @Pass_Hash   = ${passwordHash};
+    `;
+
+    console.log('Esto es lo que devuelve sp_sis_Usuarios_Hash_AC', registerResult);
+
+    if (!registerResult || registerResult.length === 0) {
+      await this.registrarLog(
+        'USUARIOS',
+        'ERROR',
+        'Registro usuario',
+        `sp_sis_Usuarios_Hash_AC no devolvió filas para documento ${dni}`,
+        dni,
+        null,
+      );
+      throw new InternalServerErrorException(
+        'Error al registrar el usuario (sin respuesta de base de datos)',
+      );
+    }
+
+    // La fila tiene una columna con nombre raro ('') que contiene el JSON:
+    // { '': '{"ok":false,"codigo":-1,"mensaje":"Usuario no encontrado o dado de baja.",...}' }
+    const firstRow = registerResult[0] as Record<string, any>;
+    const firstColumnKey = Object.keys(firstRow)[0]; // suele ser ''
+    const spJsonString = firstRow[firstColumnKey] as string;
+
+    let spResponse: SpHashResponse;
+    try {
+      spResponse = JSON.parse(spJsonString) as SpHashResponse;
+    } catch (e) {
+      await this.registrarLog(
+        'USUARIOS',
+        'ERROR',
+        'Registro usuario',
+        `Error parseando respuesta de sp_sis_Usuarios_Hash_AC para documento ${dni}: ${(e as Error).message}`,
+        dni,
+        null,
+      );
+      throw new InternalServerErrorException(
+        'Error al procesar la respuesta de base de datos',
+      );
+    }
+
+    // 3) Analizar respuesta del SP (ok true/false)
+    if (!spResponse.ok) {
+      // Loguear error con el mensaje de la base
+      await this.registrarLog(
+        'USUARIOS',
+        'ERROR',
+        'Registro usuario',
+        `Error al registrar hash para documento ${dni}. Mensaje BD: ${spResponse.mensaje} (código: ${spResponse.codigo})`,
+        dni,
+        null,
+      );
+
+      // Podrías mapear http a distintos tipos de excepción, por ahora 500 genérico:
+      throw new InternalServerErrorException(spResponse.mensaje);
+    }
+
+    // Si ok === true -> éxito, logueamos registro correcto
+    await this.registrarLog(
+      'USUARIOS',
+      'INFO',
+      'Registro usuario',
+      `Usuario registrado correctamente para documento ${dni}`,
+      dni,
+      null,
+    );
+
+    // 4) Generar token
+    const token = this.getJWT({
+      id,
+      dni,
+    });
+
+    return {
+      ok: true,
+      token,
+      userData,
+    };
+  } catch (error: any) {
+    if (error instanceof HttpException) {
+      await this.registrarLog(
+        'USUARIOS',
+        'ERROR',
+        'Registro usuario',
+        `Error controlado en registro para documento ${dni}: ${error.message}`,
+        dni ?? null,
+        null,
+      );
+      throw error;
+    }
+
+    await this.registrarLog(
+      'USUARIOS',
+      'ERROR',
+      'Registro usuario',
+      `Error inesperado en registro para documento ${dni}: ${
+        error?.message ?? error
+      }`,
+      dni ?? null,
+      null,
+    );
+
+    throw new InternalServerErrorException(
+      'Ha ocurrido un error al intentar registrar el usuario',
+    );
   }
 }
 
