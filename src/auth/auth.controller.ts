@@ -15,6 +15,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { GetUser } from './decorators/get-user.decorator';
 import { LoginUser } from './interfaces/loginUser.iterface';
 import { User } from './interfaces/getUser.interface';
+import { SendNotificationCreateCredential } from './dto/send-notification-create-credential.dto';
 
 
 
@@ -74,6 +75,22 @@ export class AuthController {
     return { message: 'OTP enviada exitosamente.' };
   } catch (error) {
     console.error('Error al enviar OTP por WhatsApp:', error);
+    throw new InternalServerErrorException('No se pudo enviar la OTP. Por favor, inténtalo de nuevo.');
+  }
+}
+  @Post('send-notification')
+  @HttpCode(HttpStatus.OK)
+  async sendNotification(@Body() sendNotification: SendNotificationCreateCredential) {    
+  
+    const { phoneNumber } = sendNotification;
+  
+
+  // ¡NUEVA FORMA DE LLAMAR A TwilioService!
+  try {
+    await this.twilioService.sendNotificationCredentialActive(phoneNumber); // Pasamos directamente el OTP
+    return { message: 'Notificación de credencial migrada enviada exitosamente.' };
+  } catch (error) {
+    console.error('Error al enviar notificación de acredencial creada:', error);
     throw new InternalServerErrorException('No se pudo enviar la OTP. Por favor, inténtalo de nuevo.');
   }
 }

@@ -9,6 +9,7 @@ export class TwilioService {
   private readonly logger = new Logger(TwilioService.name); // Para logs internos
   private readonly twilioWhatsAppNumber: string; // Número de WhatsApp de Twilio
   private readonly otpTemplateContentSid: string;
+  private readonly credentiialActiveSid: string;
 
   constructor(private readonly configService: ConfigService) {
     // Obtenemos las credenciales de Twilio de las variables de entorno
@@ -16,6 +17,7 @@ export class TwilioService {
     const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
     this.twilioWhatsAppNumber = this.configService.get<string>('TWILIO_WHATSAPP_NUMBER');
     this.otpTemplateContentSid = this.configService.get<string>('TWILIO_OTP_TEMPLATE_SID')
+    this.credentiialActiveSid = this.configService.get<string>('TWILIO_NOTIFICATION_CREDENTIAL_ACTIVE')
 
     // Verificamos que las credenciales estén presentes
     if (!accountSid || !authToken || !this.twilioWhatsAppNumber || !this.otpTemplateContentSid) {
@@ -41,6 +43,21 @@ export class TwilioService {
       return message;
     } catch (error) {
       this.logger.error(`Fallo al enviar mensaje OTP a ${to}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async sendNotificationCredentialActive(to: string): Promise<any> {
+    try {
+      const message = await this.twilioClient.messages.create({
+        from: this.twilioWhatsAppNumber, // Tu número de Twilio habilitado para WhatsApp
+        to: `whatsapp:${to}`, // El número del destinatario DEBE tener el prefijo 'whatsapp:'
+        contentSid: this.credentiialActiveSid,        
+      });
+      this.logger.log(`Mensaje de credencial migrada al cliente para registrarse enviado exitosamente. SID: ${message.sid}`);
+      return message;
+    } catch (error) {
+      this.logger.error(`Fallo al enviar notificación al usuario con número: ${to}: ${error.message}`);
       throw error;
     }
   }
