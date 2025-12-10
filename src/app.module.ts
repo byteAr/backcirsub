@@ -6,7 +6,6 @@ import { TramitesModule } from './tramites/tramites.module';
 import { AuthModule } from './auth/auth.module';
 import { EnvConfiguration } from './config/app.config';
 import { RedisModule } from './redis/redis.module';
-import { TwilioService } from './twilio/twilio.service';
 import { TwilioModule } from './twilio/twilio.module';
 import { CredencialModule } from './credencial/credencial.module';
 
@@ -21,7 +20,7 @@ import { CredencialModule } from './credencial/credencial.module';
     TwilioModule,
     CredencialModule],
   controllers: [AppController],
-  providers: [AppService, TwilioService],
+  providers: [AppService],
 })
 export class AppModule {
 

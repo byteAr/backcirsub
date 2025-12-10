@@ -368,8 +368,7 @@ async register(createUserDto: CreateUserDto): Promise<any> {
         dni,
         null,
       );
-
-      // Podrías mapear http a distintos tipos de excepción, por ahora 500 genérico:
+      
       throw new InternalServerErrorException(spResponse.mensaje);
     }
 

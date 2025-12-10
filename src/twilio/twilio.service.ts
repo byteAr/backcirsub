@@ -1,6 +1,7 @@
 // src/twilio/twilio.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from 'src/prisma/prisma.service';
 import * as twilio from 'twilio'; // Importa la librería de Twilio
 
 @Injectable()
@@ -11,7 +12,7 @@ export class TwilioService {
   private readonly otpTemplateContentSid: string;
   private readonly credentiialActiveSid: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(private prismaService:PrismaService, private readonly configService: ConfigService) {
     const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
     const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
     this.twilioWhatsAppNumber = this.configService.get<string>('TWILIO_WHATSAPP_NUMBER');
@@ -80,12 +81,49 @@ export class TwilioService {
       this.logger.log(
         `Mensaje de credencial migrada enviado exitosamente. SID: ${message.sid}`,
       );
+      await this.registrarLog(
+          'USUARIOS',
+          'INFO',
+          'Creación de credencial',
+          `Mensaje de notificación enviado por whatsapp exitosamente a ${to}`,
+          null
+        );
       return message;
     } catch (error) {
       this.logger.error(
         `Fallo al enviar notificación al usuario con número: ${to}: ${error.message}`,
       );
+      await this.registrarLog(
+          'USUARIOS',
+          'ERROR',
+          'Creación de credencial',
+          `Mensaje de notificación no se pudo enviar a ${to}`,
+          null
+        );
       throw error;
     }
+  }
+
+  private async registrarLog(
+    modulo: string,
+    tipo: 'INFO' | 'WARN' | 'ERROR',
+    accion: string,
+    observacion: string,
+    usuario?: string | null,
+    ip?: string | null,
+  ) {
+    // Si no tenemos usuario o IP, dejamos que el SP los guarde como '' cuando recibe NULL
+    const usuarioParam = usuario ?? null;
+    const ipParam = ip ?? null;
+
+    await this.prismaService.$executeRaw`
+      EXEC dbo.sp_sis_log_in 
+        @Modulo      = ${modulo},
+        @Tipo        = ${tipo},
+        @Accion      = ${accion},
+        @Observacion = ${observacion},
+        @Usuario     = ${usuarioParam},
+        @Ip          = ${ipParam};
+    `;
   }
 }

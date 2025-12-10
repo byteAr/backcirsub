@@ -91,7 +91,7 @@ export class AuthController {
     return { message: 'Notificación de credencial migrada enviada exitosamente.' };
   } catch (error) {
     console.error('Error al enviar notificación de acredencial creada:', error);
-    throw new InternalServerErrorException('No se pudo enviar la OTP. Por favor, inténtalo de nuevo.');
+    throw new InternalServerErrorException('No se pudo enviar la notificación. Por favor, inténtalo de nuevo.');
   }
 }
 
