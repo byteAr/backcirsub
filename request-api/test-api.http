@@ -1,0 +1,14 @@
+### Variables Globales
+@hostname = localhost
+@port = 3000
+@host = http://{{hostname}}:{{port}}
+@contentType = application/json
+
+### 
+# @name createUser
+POST {{host}}/auth/send-notification
+Content-Type: {{contentType}}
+
+{
+    "phoneNumber": "+5491150961766"
+}

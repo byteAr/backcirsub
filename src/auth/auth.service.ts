@@ -487,7 +487,7 @@ async register(createUserDto: CreateUserDto): Promise<any> {
     return isMatch;
   }
 
-  async obtenerPersonaPorDni(dni: string, email:string, telefono:string): Promise<any> {
+  async obtenerPersonaPorDni(dni: string, telefono:string): Promise<any> {
     const rawResponse: any = await this.perfilCompleto(dni);
       const userPosition = rawResponse[0];
       const userDataPre= userPosition["Json"];
@@ -513,7 +513,6 @@ if (loginVacio) {
 
 if (
   usuarioNoRegistrado &&
-  userData.Login?.[0]?.login_email === email &&
   userData.Login?.[0]?.celular === telefono
 ) {
   return {
@@ -542,13 +541,13 @@ return { ok: false };
     }
   }
 
-  async obtenerPersonaPorDniRecoveryPass(dni: string, email:string, telefono:string): Promise<any> {
+  async obtenerPersonaPorDniRecoveryPass(dni: string, telefono:string): Promise<any> {
     const rawResponse: any = await this.perfilCompleto(dni);
       const userPosition = rawResponse[0];
       const userDataPre= userPosition["Json"];
       const userData = JSON.parse(userDataPre);     
 
-      if (userData.Login[0]?.login_email === email && userData.Login[0]?.celular === telefono) {         
+      if (userData.Login[0]?.celular === telefono) {         
          return {
           ok: true,
           userData

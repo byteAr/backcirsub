@@ -62,8 +62,7 @@ export class AuthController {
   async sendOtp(@Body() sendOtpDto: SendOtpDto) {
     
   
-    const { phoneNumber, email } = sendOtpDto;
-    console.log(`este es el mail:`, email);
+    const { phoneNumber } = sendOtpDto;
   
 
     const otp = this.authService.generateOtp();
@@ -137,15 +136,15 @@ export class AuthController {
   }
 
   @Post('verify-dni')
-  verifyDni(@Body('dni') dni:string, @Body('email') email:string, @Body('telefono') telefono:string){  
+  verifyDni(@Body('dni') dni:string, @Body('telefono') telefono:string){  
          
-    return this.authService.obtenerPersonaPorDni( dni, email, telefono)
+    return this.authService.obtenerPersonaPorDni( dni, telefono)
   }
 
   @Post('verify-repass')
-  verifyDniRecoveryPass(@Body('dni') dni:string, @Body('email') email:string, @Body('telefono') telefono:string){  
+  verifyDniRecoveryPass(@Body('dni') dni:string, @Body('telefono') telefono:string){  
          
-    return this.authService.obtenerPersonaPorDniRecoveryPass( dni, email, telefono)
+    return this.authService.obtenerPersonaPorDniRecoveryPass( dni, telefono)
   }
 
   @Post('upload-profileimage')
