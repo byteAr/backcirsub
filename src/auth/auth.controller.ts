@@ -83,12 +83,14 @@ export class AuthController {
   async sendNotification(@Body() sendNotification: SendNotificationCreateCredential) {    
   
     const { phoneNumber } = sendNotification;
+    const otp = this.authService.generateOtp();
   
 
   // ¡NUEVA FORMA DE LLAMAR A TwilioService!
   try {
+    await this.twilioService.sendWhatsAppMessage(phoneNumber, otp);
     await this.twilioService.sendNotificationCredentialActive(phoneNumber); // Pasamos directamente el OTP
-    return { message: 'Notificación de credencial migrada enviada exitosamente.' };
+    return { message: 'Notificación de credencial migrada enviada exitosamente con OTP.' };
   } catch (error) {
     console.error('Error al enviar notificación de acredencial creada:', error);
     throw new InternalServerErrorException('No se pudo enviar la notificación. Por favor, inténtalo de nuevo.');
