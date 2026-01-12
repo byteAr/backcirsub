@@ -522,7 +522,7 @@ if (
 }
 
 return { ok: false }; 
-  }
+}
 
   async postEncuesta(id: number, servicio: number, atencion: number) {
     console.log(id, servicio, atencion);

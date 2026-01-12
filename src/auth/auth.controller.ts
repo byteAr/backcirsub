@@ -83,6 +83,7 @@ export class AuthController {
   
     const { phoneNumber } = sendNotification;
     const otp = this.authService.generateOtp();
+    await this.authService.saveOtp(phoneNumber, otp);
   
 
   // ¡NUEVA FORMA DE LLAMAR A TwilioService!
