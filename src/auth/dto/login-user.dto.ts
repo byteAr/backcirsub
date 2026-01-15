@@ -3,7 +3,7 @@ import { IsEmail, isNumber, IsNumber, IsString, Matches, MaxLength, MinLength } 
 export class LoginUserDto {  
 
     @IsString()
-    @MinLength(8)
+    @MinLength(7)
     dni: string;   
 
     @IsString()
