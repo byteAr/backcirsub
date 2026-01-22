@@ -70,6 +70,12 @@ export class AuthService {
 
       if (!passwordHasheado) throw new UnauthorizedException({ ok: false, message: 'El usuario no tiene contraseña' });
 
+      // VALIDACIÓN DE ACTIVO COMENTADA TEMPORALMENTE PARA PRUEBAS
+      // if (!user.Activo) {
+      //   await this.registrarLog('USUARIOS', 'WARN', 'Login usuario', `Usuario inactivo (registro incompleto): ${dni}`, null, ip);
+      //   throw new UnauthorizedException({ ok: false, message: 'Debe completar su registro cargando una foto de perfil' });
+      // }
+
       const isMatch = await bcrypt.compare(password, passwordHasheado);
       if (!isMatch) {
         await this.registrarLog('USUARIOS', 'ERROR', 'Login usuario', `Password incorrecto: ${dni}`, null, ip);
@@ -232,9 +238,18 @@ export class AuthService {
     try {
       const isValid = await this.awsRekognitionService.validateSingleFaceVisible(file.buffer);
       if (!isValid) return { ok: false, message: 'Rostro no detectado' };
+      
       const request = pool.request();
       request.input('Personas_Id', sql.Int, personasId).input('Foto_1', sql.VarBinary(sql.MAX), file.buffer).input('Activo', sql.Bit, true);
       const result = await request.execute('sp_Personas_foto_IN');
+      
+      // Activar el usuario en sis_Usuarios después de guardar la foto exitosamente
+      await this.prismaService.$executeRaw`
+        UPDATE sis_Usuarios 
+        SET Activo = 1 
+        WHERE Personas_Id = ${personasId} AND BORRADO_ IS NULL;
+      `;
+      
       return { ok: true, dbResponse: result.recordset };
     } finally { await pool.close(); }
   }

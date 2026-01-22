@@ -4,7 +4,7 @@ export class CreateUserDto {
 
 
     @IsString()
-    @MinLength(8)
+    @MinLength(7)
     dni: string;
 
     
