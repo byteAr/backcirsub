@@ -101,28 +101,49 @@ export class AuthService {
   }
 
   async register(createUserDto: CreateUserDto): Promise<any> {
+    console.log('llega hasta acá');
     const { dni, password } = createUserDto;
     try {
+      console.log('=== DEBUG REGISTER ===');
+      console.log('DNI:', dni);
+      
       const rawResponse = await this.perfilCompleto(dni);
       if (!rawResponse?.length || !rawResponse[0]['Json']) throw new NotFoundException('DNI no registrado');
 
       const userData = JSON.parse(rawResponse[0]['Json']);
       const persona = userData.Persona[0];
+      console.log('Persona ID:', persona.Id);
+      
       const passwordHash = await bcrypt.hash(password, 10);
 
       const registerResult: any[] = await this.prismaService.$queryRaw`
         EXEC sp_sis_Usuarios_Hash_AC @Personas_Id = ${persona.Id}, @Pass_Hash = ${passwordHash};
       `;
 
+      console.log('registerResult raw:', registerResult);
+
       if (!registerResult?.length) throw new InternalServerErrorException('Error BD Registro');
 
       const firstRow = registerResult[0];
-      const spResponse = JSON.parse(firstRow[Object.keys(firstRow)[0]]) as SpHashResponse;
+      console.log('firstRow:', firstRow);
+      
+      const spResponseRaw = firstRow[Object.keys(firstRow)[0]];
+      console.log('spResponseRaw:', spResponseRaw);
+      
+      const spResponse = JSON.parse(spResponseRaw) as SpHashResponse;
+      console.log('spResponse parsed:', spResponse);
 
-      if (!spResponse.ok) throw new BadRequestException(spResponse.mensaje);
+      if (!spResponse.ok) {
+        console.log('SP devolvió ok: false, mensaje:', spResponse.mensaje);
+        throw new BadRequestException(spResponse.mensaje);
+      }
 
-      return { ok: true, token: this.getJWT({ id: persona.Id, dni }), userData };
+      console.log('Registro exitoso, generando token...');
+      const result = { ok: true, token: this.getJWT({ id: persona.Id, dni }), userData };
+      console.log('=== FIN DEBUG REGISTER ===');
+      return result;
     } catch (error: any) {
+      console.error('Error en register:', error.message);
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Error en registro');
     }
@@ -217,15 +238,47 @@ export class AuthService {
 
   async obtenerPersonaPorDni(dni: string, telefono: string): Promise<any> {
     const rawResponse = await this.perfilCompleto(dni);
-    if (!rawResponse.length) return { ok: false };
+    if (!rawResponse.length) {
+      return { ok: false, reason: 'DNI no encontrado en la base de datos', debug: { dni } };
+    }
+    
     const userData = JSON.parse(rawResponse[0]["Json"]);
     const loginVacio = !Array.isArray(userData.Login) || userData.Login.length === 0;
     const usuarioNoRegistrado = userData.Login?.[0]?.Usuario_Registrado === false;
+    const telefonoRegistrado = userData.Login?.[0]?.celular;
+    const telefonoCoincide = telefonoRegistrado === telefono;
 
-    if (loginVacio || (usuarioNoRegistrado && userData.Login?.[0]?.celular === telefono)) {
+    // Log para debugging
+    console.log('=== DEBUG obtenerPersonaPorDni ===');
+    console.log('DNI:', dni);
+    console.log('Teléfono ingresado:', telefono);
+    console.log('Teléfono registrado:', telefonoRegistrado);
+    console.log('Login vacío:', loginVacio);
+    console.log('Usuario no registrado:', usuarioNoRegistrado);
+    console.log('Teléfono coincide:', telefonoCoincide);
+    console.log('userData.Login:', userData.Login);
+    console.log('================================');
+
+    if (loginVacio || (usuarioNoRegistrado && telefonoCoincide)) {
       return { ok: true, userData };
     }
-    return { ok: false };
+    
+    // Devolver información sobre por qué falló
+    return { 
+      ok: false, 
+      reason: usuarioNoRegistrado === false 
+        ? 'El usuario ya está registrado' 
+        : !telefonoCoincide 
+          ? 'El teléfono no coincide con el registrado' 
+          : 'Condición no cumplida',
+      debug: {
+        loginVacio,
+        usuarioNoRegistrado,
+        telefonoCoincide,
+        telefonoRegistrado,
+        telefonoIngresado: telefono
+      }
+    };
   }
 
   async postEncuesta(id: number, servicio: number, atencion: number) {

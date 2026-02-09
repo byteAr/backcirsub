@@ -102,7 +102,7 @@ export class AuthController {
   async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto) {
     const { phoneNumber, otp } = verifyOtpDto;
 
-    // 1. Verificar la OTP utilizando el servicio de autenticación
+    // Verificar la OTP utilizando el servicio de autenticación
     const isValid = await this.authService.verifyOtp(phoneNumber, otp);
 
     if (isValid) {
@@ -112,10 +112,7 @@ export class AuthController {
         message: 'OTP verificada exitosamente.' };
     } else {
       // Si la OTP no es válida (no coincide, o ha expirado, o no existe)
-      // Lanzamos una excepción 404 Not Found para indicar que la OTP no es "encontrada"
-      // en el contexto de ser válida y activa para ese usuario.
       throw new NotFoundException('OTP inválida o expirada.');
-      // Alternativamente, podrías usar new BadRequestException('OTP inválida.'); si prefieres 400.
     }
   }
 
