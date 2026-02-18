@@ -152,23 +152,45 @@ export class AuthService {
   // --- MÉTODOS RESTAURADOS (Los que daban error en el Controller) ---
 
   async resetPass(id: number, password: string) {
+    console.log('=== DEBUG resetPass ===');
+    console.log('Personas_Id:', id);
+    
     const passHash = await bcrypt.hash(password, 10);
     const rows = await this.prismaService.$queryRaw<any[]>`
       EXEC dbo.sp_sis_Usuarios_Hash_AC @Personas_Id = ${id}, @Pass_Hash = ${passHash}
     `;
 
+    console.log('rows:', rows);
+
     const row = rows?.[0];
-    if (!row) return { ok: false, message: 'Sin respuesta de base de datos' };
+    if (!row) {
+      console.log('Sin respuesta de BD');
+      return { ok: false, message: 'Sin respuesta de base de datos' };
+    }
 
     let val: any = Object.values(row)[0];
     if (val instanceof Buffer) val = val.toString('utf8');
     let str = String(val ?? '').trim().replace(/^\uFEFF/, '');
+    
+    console.log('SP response string:', str);
 
     try {
         const payload = JSON.parse(str);
+        console.log('payload parsed:', payload);
+        
         const code = Number(payload.Codigo ?? payload.codigo ?? 0);
-        return { ok: code > 0, code, message: payload.Mensaje || payload.mensaje };
-    } catch {
+        // Considerar éxito si code > 0 O si el mensaje indica actualización exitosa
+        const esExito = code > 0 || 
+                        payload.mensaje?.toLowerCase().includes('actualizado') ||
+                        payload.Mensaje?.toLowerCase().includes('actualizado');
+        
+        const result = { ok: esExito, code, message: payload.Mensaje || payload.mensaje };
+        console.log('resetPass result:', result);
+        console.log('=== FIN DEBUG resetPass ===');
+        
+        return result;
+    } catch (e) {
+        console.error('Error parseando respuesta:', e);
         return { ok: false, message: 'Error parseando respuesta del SP' };
     }
   }
