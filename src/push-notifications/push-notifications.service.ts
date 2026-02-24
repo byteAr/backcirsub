@@ -10,15 +10,22 @@ const TTL_90_DIAS = 90 * 24 * 60 * 60;
 export class PushNotificationsService {
   private readonly logger = new Logger(PushNotificationsService.name);
 
+  private vapidReady = false;
+
   constructor(
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
   ) {
-    webpush.setVapidDetails(
-      this.configService.get<string>('VAPID_SUBJECT'),
-      this.configService.get<string>('VAPID_PUBLIC_KEY'),
-      this.configService.get<string>('VAPID_PRIVATE_KEY'),
-    );
+    const subject = this.configService.get<string>('VAPID_SUBJECT');
+    const publicKey = this.configService.get<string>('VAPID_PUBLIC_KEY');
+    const privateKey = this.configService.get<string>('VAPID_PRIVATE_KEY');
+
+    if (subject && publicKey && privateKey) {
+      webpush.setVapidDetails(subject, publicKey, privateKey);
+      this.vapidReady = true;
+    } else {
+      this.logger.warn('VAPID keys no configuradas. Las push notifications están deshabilitadas.');
+    }
   }
 
   getVapidPublicKey(): string {
@@ -56,6 +63,11 @@ export class PushNotificationsService {
         data: { url },
       },
     });
+
+    if (!this.vapidReady) {
+      this.logger.warn('Intento de enviar push sin VAPID configurado');
+      return { ok: false, message: 'Push notifications no configuradas en el servidor' };
+    }
 
     try {
       await webpush.sendNotification(
