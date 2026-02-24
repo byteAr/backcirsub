@@ -8,6 +8,7 @@ import { EnvConfiguration } from './config/app.config';
 import { RedisModule } from './redis/redis.module';
 import { TwilioModule } from './twilio/twilio.module';
 import { CredencialModule } from './credencial/credencial.module';
+import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 
 @Module({
   imports: [
@@ -18,7 +19,8 @@ import { CredencialModule } from './credencial/credencial.module';
     AuthModule,
     RedisModule,
     TwilioModule,
-    CredencialModule],
+    CredencialModule,
+    PushNotificationsModule],
   controllers: [AppController],
   providers: [AppService],
 })
