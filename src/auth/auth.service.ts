@@ -40,7 +40,7 @@ interface SpHashResponse {
 @Injectable()
 export class AuthService {
 
-  private readonly OTP_EXPIRATION_SECONDS = 20 * 60;
+  private readonly OTP_EXPIRATION_SECONDS = 40 * 60;
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
@@ -254,7 +254,7 @@ export class AuthService {
   async verifyOtp(phoneNumber: string, otp: string): Promise<boolean> {
     const key = `otp:${phoneNumber}`;
     const storedOtp = await this.redisService.get(key);
-    if (storedOtp === otp) { await this.redisService.del(key); return true; }
+    if (storedOtp === otp) { return true; }
     return false;
   }
 
@@ -282,6 +282,8 @@ export class AuthService {
     console.log('================================');
 
     if (loginVacio || (usuarioNoRegistrado && telefonoCoincide)) {
+      const personasId = userData.Persona[0].Id;
+      await this.redisService.set(`otp:reg:${personasId}`, telefono, this.OTP_EXPIRATION_SECONDS);
       return { ok: true, userData };
     }
     
@@ -313,18 +315,25 @@ export class AuthService {
     try {
       const isValid = await this.awsRekognitionService.validateSingleFaceVisible(file.buffer);
       if (!isValid) return { ok: false, message: 'Rostro no detectado' };
-      
+
       const request = pool.request();
       request.input('Personas_Id', sql.Int, personasId).input('Foto_1', sql.VarBinary(sql.MAX), file.buffer).input('Activo', sql.Bit, true);
       const result = await request.execute('sp_Personas_foto_IN');
-      
+
       // Activar el usuario en sis_Usuarios después de guardar la foto exitosamente
       await this.prismaService.$executeRaw`
-        UPDATE sis_Usuarios 
-        SET Activo = 1 
+        UPDATE sis_Usuarios
+        SET Activo = 1
         WHERE Personas_Id = ${personasId} AND BORRADO_ IS NULL;
       `;
-      
+
+      // Registro completo: eliminar OTP y mapeo de Redis
+      const phoneNumber = await this.redisService.get(`otp:reg:${personasId}`);
+      if (phoneNumber) {
+        await this.redisService.del(`otp:${phoneNumber}`);
+        await this.redisService.del(`otp:reg:${personasId}`);
+      }
+
       return { ok: true, dbResponse: result.recordset };
     } finally { await pool.close(); }
   }
