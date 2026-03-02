@@ -7,7 +7,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 
-import { TwilioService } from '../twilio/twilio.service'; // Importa el servicio de Twilio
+import { TwilioService, MensajeWhatsappCodigo, MensajeWhatsappVariables } from '../twilio/twilio.service'; // Importa el servicio de Twilio y tipos de mensajes
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { passwordUser } from './dto/password-user.dto';
@@ -16,10 +16,6 @@ import { GetUser } from './decorators/get-user.decorator';
 import { LoginUser } from './interfaces/loginUser.iterface';
 import { User } from './interfaces/getUser.interface';
 import { SendNotificationCreateCredential } from './dto/send-notification-create-credential.dto';
-
-
-
-
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -205,6 +201,18 @@ export class AuthController {
     return res.end(buffer); // o res.send(buffer);
   }
 
-  
+  @Post('send-reintegro-whatsapp')
+  @HttpCode(HttpStatus.OK)
+  async sendReintegroWhatsapp(
+    @Body('codigoMensaje') codigoMensaje: MensajeWhatsappCodigo,
+    @Body('numeroTelefono') numeroTelefono: string,
+    @Body('variables') variables: MensajeWhatsappVariables,
+  ) {
+    return this.twilioService.sendMensajeReintegro(
+      variables,
+      codigoMensaje,
+      numeroTelefono,
+    );
+  }
 
 }
