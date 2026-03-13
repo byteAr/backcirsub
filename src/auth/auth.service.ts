@@ -313,8 +313,9 @@ export class AuthService {
   async saveImage(file: Express.Multer.File, personasId: number) {
     const pool = await sql.connect(sqlConfig);
     try {
-      const isValid = await this.awsRekognitionService.validateSingleFaceVisible(file.buffer);
-      if (!isValid) return { ok: false, message: 'Rostro no detectado' };
+      // Reconocimiento facial de AWS Rekognition deshabilitado temporalmente.
+      // const isValid = await this.awsRekognitionService.validateSingleFaceVisible(file.buffer);
+      // if (!isValid) return { ok: false, message: 'Rostro no detectado' };
 
       const request = pool.request();
       request.input('Personas_Id', sql.Int, personasId).input('Foto_1', sql.VarBinary(sql.MAX), file.buffer).input('Activo', sql.Bit, true);
