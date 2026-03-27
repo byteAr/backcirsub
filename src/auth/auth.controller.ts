@@ -150,9 +150,9 @@ export class AuthController {
     console.log('este es el id de usuario',userId);
 
     const parsedId = parseInt(userId);
-  if (isNaN(parsedId)) {
-    throw new BadRequestException('userId inválido');
-  }
+    if (isNaN(parsedId)) {
+      throw new BadRequestException('userId inválido');
+    }
 
     return this.authService.saveImage(file, parsedId);
   }
@@ -160,19 +160,30 @@ export class AuthController {
 
 
   @Post('update-profileimage')
-  @UseInterceptors(FileInterceptor('profilePicture'))
-  async updateFile(
-    @UploadedFile() file: Express.Multer.File,
-    @Body('userId') userId: string
-  ) {
-    const parsedId = parseInt(userId);
-    
+@UseInterceptors(FileInterceptor('profilePicture'))
+async updateFile(
+  @UploadedFile() file: Express.Multer.File,
+  @Body('userId') userId: string
+) {
+  console.log('🧪 DEBUG UPDATE IMAGE');
+  console.log('userId:', userId);
+  console.log('file exists:', !!file);
+  console.log(
+    'buffer length:',
+    file?.buffer?.length,
+    'mimetype:',
+    file?.mimetype,
+    'name:',
+    file?.originalname
+  );
+
+  const parsedId = parseInt(userId);
   if (isNaN(parsedId)) {
     throw new BadRequestException('userId inválido');
   }
 
-    return this.authService.updateImage(file, parsedId);
-  }
+  return this.authService.updateImage(file, parsedId);
+}
 
   
 

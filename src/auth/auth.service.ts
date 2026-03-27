@@ -222,6 +222,7 @@ export class AuthService {
       `;
       return { message: 'Imagen guardada correctamente', dbResponse: result };
     } catch (error) {
+      console.log(error)
       throw new InternalServerErrorException('No se pudo actualizar la imagen.');
     }
   }
@@ -316,6 +317,7 @@ export class AuthService {
       // Reconocimiento facial de AWS Rekognition deshabilitado temporalmente.
       // const isValid = await this.awsRekognitionService.validateSingleFaceVisible(file.buffer);
       // if (!isValid) return { ok: false, message: 'Rostro no detectado' };
+
 
       const request = pool.request();
       request.input('Personas_Id', sql.Int, personasId).input('Foto_1', sql.VarBinary(sql.MAX), file.buffer).input('Activo', sql.Bit, true);

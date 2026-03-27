@@ -31,12 +31,21 @@ export class CredencialService {
   }
 
   private buildApiKey(): string {
-    const now = new Date(); // Ojo con la zona horaria del servidor
-    const dd = now.getDate().toString().padStart(2, '0');
-    const mm = (now.getMonth() + 1).toString().padStart(2, '0');
-    const yy = now.getFullYear().toString().slice(-2); // últimos 2 dígitos
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('es-AR', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+    }).formatToParts(now);
 
-    return `api-key-tk-${dd}${mm}${yy}`;
+    const dd = parts.find(p => p.type === 'day')!.value;
+    const mm = parts.find(p => p.type === 'month')!.value;
+    const yy = parts.find(p => p.type === 'year')!.value;
+
+    const key = `api-key-tk-${dd}${mm}${yy}`;
+    console.log('API KEY generada:', key);
+    return key;
   }
 
 async updateCbu(
@@ -159,6 +168,7 @@ async updateCbu(
             : sqlResult.value
           : null,
       mariaDb: phpData ?? phpError, // <- acá va literal lo que respondió o el error
+      debugKey: this.buildApiKey(),
     };
   } catch (error: any) {
     console.error('❌ Error inesperado en updateCbu:', error);
