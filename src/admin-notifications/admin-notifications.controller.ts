@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -22,13 +23,30 @@ export class AdminNotificationsController {
     return this.service.getPermission(dni);
   }
 
+  @Get('permissions')
+  @UseGuards(AuthGuard())
+  listPermissions() {
+    return this.service.listPermissions();
+  }
+
   @Post('permissions')
   @UseGuards(AuthGuard())
   addPermission(
     @GetUser() user: { id: number; dni: string },
     @Body('dni') dni: string,
+    @Body('nombre') nombre: string,
+    @Body('apellido') apellido: string,
   ) {
-    return this.service.addPermission(dni, user.dni);
+    return this.service.addPermission(dni, user.dni, nombre ?? '', apellido ?? '');
+  }
+
+  @Delete('permissions/:dni')
+  @UseGuards(AuthGuard())
+  removePermission(
+    @GetUser() user: { id: number; dni: string },
+    @Param('dni') dni: string,
+  ) {
+    return this.service.removePermission(dni, user.dni);
   }
 
   @Get('search')

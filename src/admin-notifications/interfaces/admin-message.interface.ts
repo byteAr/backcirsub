@@ -3,4 +3,5 @@ export interface AdminMessage {
   titulo: string;
   cuerpo: string;
   fecha: string; // ISO 8601
+  senderName?: string;
 }

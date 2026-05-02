@@ -49,6 +49,11 @@ export class RedisService implements OnModuleDestroy {
     return this.redisClient.del(key);
   }
 
+  // Método para obtener claves que coincidan con un patrón
+  async keys(pattern: string): Promise<string[]> {
+    return this.redisClient.keys(pattern);
+  }
+
   // Asegura que la conexión a Redis se cierre al destruir el módulo
   async onModuleDestroy() {
     await this.redisClient.quit();

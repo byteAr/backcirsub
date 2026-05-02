@@ -34,6 +34,8 @@ export class AdminNotificationsService {
   async addPermission(
     targetDni: string,
     callerDni: string,
+    nombre: string,
+    apellido: string,
   ): Promise<{ ok: boolean }> {
     if (!SUPER_ADMIN_DNIS.includes(callerDni)) {
       throw new ForbiddenException(
@@ -41,7 +43,45 @@ export class AdminNotificationsService {
       );
     }
     await this.redisService.set(`admin:perm:${targetDni}`, '1');
-    this.logger.log(`Permiso de envío otorgado a DNI ${targetDni} por ${callerDni}`);
+    await this.redisService.set(
+      `admin:perm:info:${targetDni}`,
+      JSON.stringify({ nombre, apellido }),
+    );
+    this.logger.log(`Permiso de envío otorgado a DNI ${targetDni} (${nombre} ${apellido}) por ${callerDni}`);
+    return { ok: true };
+  }
+
+  async listPermissions(): Promise<
+    { dni: string; nombre: string; apellido: string }[]
+  > {
+    const allKeys = await this.redisService.keys('admin:perm:*');
+    // Filtramos solo las claves de permiso (excluimos las de info)
+    const permKeys = allKeys.filter(
+      (k) => !k.startsWith('admin:perm:info:'),
+    );
+
+    const results: { dni: string; nombre: string; apellido: string }[] = [];
+    for (const key of permKeys) {
+      const dni = key.replace('admin:perm:', '');
+      const infoRaw = await this.redisService.get(`admin:perm:info:${dni}`);
+      const info = infoRaw ? JSON.parse(infoRaw) : { nombre: '—', apellido: '' };
+      results.push({ dni, nombre: info.nombre, apellido: info.apellido });
+    }
+    return results;
+  }
+
+  async removePermission(
+    targetDni: string,
+    callerDni: string,
+  ): Promise<{ ok: boolean }> {
+    if (!SUPER_ADMIN_DNIS.includes(callerDni)) {
+      throw new ForbiddenException(
+        'Solo los super admins pueden quitar permisos',
+      );
+    }
+    await this.redisService.del(`admin:perm:${targetDni}`);
+    await this.redisService.del(`admin:perm:info:${targetDni}`);
+    this.logger.log(`Permiso de envío removido al DNI ${targetDni} por ${callerDni}`);
     return { ok: true };
   }
 
@@ -71,6 +111,16 @@ export class AdminNotificationsService {
     const { role } = await this.getPermission(callerDni);
     if (!role) throw new ForbiddenException('Sin permisos para enviar notificaciones');
 
+    // Obtener nombre del remitente
+    let senderName = 'Administrador';
+    try {
+      const sender = await this.searchByDni(callerDni);
+      senderName = `${sender.nombre} ${sender.apellido}`;
+    } catch {
+      // Si no se encuentra, usamos el DNI como fallback
+      senderName = `DNI ${callerDni}`;
+    }
+
     const messagesKey = `admin:msgs:${targetUserId}`;
     const unreadKey = `admin:unread:${targetUserId}`;
 
@@ -81,6 +131,7 @@ export class AdminNotificationsService {
       titulo,
       cuerpo,
       fecha: new Date().toISOString(),
+      senderName,
     };
     messages.push(newMessage);
     await this.redisService.set(messagesKey, JSON.stringify(messages));
@@ -88,7 +139,7 @@ export class AdminNotificationsService {
     const currentUnread = await this.redisService.get(unreadKey);
     const newUnread = currentUnread ? parseInt(currentUnread, 10) + 1 : 1;
     await this.redisService.set(unreadKey, newUnread.toString());
-    this.logger.log(`Mensaje guardado para userId=${targetUserId}`);
+    this.logger.log(`Mensaje guardado para userId=${targetUserId} por ${senderName}`);
 
     const url = `/auth/login?notify=1&title=${encodeURIComponent(titulo)}&body=${encodeURIComponent(cuerpo)}`;
     try {
