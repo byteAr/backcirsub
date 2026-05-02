@@ -50,7 +50,7 @@ export class AdminNotificationsService {
   ): Promise<{ id: number; nombre: string; apellido: string }> {
     const result = await this.prisma.$queryRaw<
       { Id: number; Nombre: string; Apellido: string }[]
-    >`SELECT TOP 1 Id, Nombre, Apellido FROM Personas WHERE Documento = ${dni} AND Activo = 1`;
+    >`SELECT TOP 1 Id, Nombre, Apellido FROM Personas WHERE Documento = ${dni}`;
 
     if (!result || result.length === 0) {
       throw new NotFoundException(`No se encontró persona con DNI ${dni}`);
