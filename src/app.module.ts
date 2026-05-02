@@ -9,6 +9,7 @@ import { RedisModule } from './redis/redis.module';
 import { TwilioModule } from './twilio/twilio.module';
 import { CredencialModule } from './credencial/credencial.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
+import { AdminNotificationsModule } from './admin-notifications/admin-notifications.module';
 
 @Module({
   imports: [
@@ -20,7 +21,9 @@ import { PushNotificationsModule } from './push-notifications/push-notifications
     RedisModule,
     TwilioModule,
     CredencialModule,
-    PushNotificationsModule],
+    PushNotificationsModule,
+    AdminNotificationsModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
