@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 import { AdminNotificationsService } from './admin-notifications.service';
 import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -76,11 +76,15 @@ describe('AdminNotificationsService', () => {
       );
 
       expect(result.ok).toBe(true);
-      // Verifica que se guardó el mensaje
-      const [messagesCallArgs] = mockRedis.set.mock.calls.find(
-        ([k]) => k === 'admin:msgs:10',
-      )!;
-      expect(messagesCallArgs).toBe('admin:msgs:10');
+      expect(result.pushed).toBe(true);
+      // Verifica que se guardó el mensaje con contenido correcto
+      const messagesCall = mockRedis.set.mock.calls.find(([k]) => k === 'admin:msgs:10');
+      expect(messagesCall).toBeDefined();
+      const payload = JSON.parse(messagesCall![1]);
+      expect(payload).toHaveLength(1);
+      expect(payload[0]).toMatchObject({ titulo: 'Hola', cuerpo: 'Cuerpo' });
+      expect(payload[0].id).toBeDefined();
+      expect(payload[0].fecha).toBeDefined();
     });
 
     it('lanza ForbiddenException si el caller no tiene permiso', async () => {
@@ -106,6 +110,10 @@ describe('AdminNotificationsService', () => {
         '34824092',
       );
       expect(result).toEqual({ ok: true, pushed: false });
+      // Verifica que el contador unread fue incrementado a 1
+      const unreadCall = mockRedis.set.mock.calls.find(([k]) => k === 'admin:unread:5');
+      expect(unreadCall).toBeDefined();
+      expect(unreadCall![1]).toBe('1');
     });
   });
 
