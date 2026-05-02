@@ -86,7 +86,7 @@ export class AdminNotificationsService {
     await this.redisService.set(messagesKey, JSON.stringify(messages));
 
     const currentUnread = await this.redisService.get(unreadKey);
-    const newUnread = currentUnread ? parseInt(currentUnread) + 1 : 1;
+    const newUnread = currentUnread ? parseInt(currentUnread, 10) + 1 : 1;
     await this.redisService.set(unreadKey, newUnread.toString());
     this.logger.log(`Mensaje guardado para userId=${targetUserId}`);
 
@@ -113,8 +113,8 @@ export class AdminNotificationsService {
     ]);
 
     const messages: AdminMessage[] = rawMessages ? JSON.parse(rawMessages) : [];
-    const unread = rawUnread ? parseInt(rawUnread) : 0;
-    return { messages: messages.reverse(), unread };
+    const unread = rawUnread ? parseInt(rawUnread, 10) : 0;
+    return { messages: [...messages].reverse(), unread };
   }
 
   async markRead(userId: number): Promise<{ ok: boolean }> {

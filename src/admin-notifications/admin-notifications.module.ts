@@ -5,11 +5,11 @@ import { AdminNotificationsService } from './admin-notifications.service';
 import { RedisModule } from '../redis/redis.module';
 import { AuthModule } from '../auth/auth.module';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-  imports: [RedisModule, ConfigModule, AuthModule, PushNotificationsModule],
+  imports: [RedisModule, ConfigModule, AuthModule, PushNotificationsModule, PrismaModule],
   controllers: [AdminNotificationsController],
-  providers: [AdminNotificationsService, PrismaService],
+  providers: [AdminNotificationsService],
 })
 export class AdminNotificationsModule {}
