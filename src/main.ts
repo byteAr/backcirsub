@@ -4,8 +4,21 @@ import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const allowedOrigins = [
+    'http://localhost:4200',
+    /^https:\/\/([a-z0-9-]+\.)*cirsubgn\.org\.ar$/,
+  ];
+
   app.enableCors({
-    origin: ['http://localhost:4200','https://credencial.cirsubgn.org.ar'],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.some((allowed) =>
+        typeof allowed === 'string' ? allowed === origin : allowed.test(origin),
+      )) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origen no permitido por CORS: ${origin}`));
+      }
+    },
     credentials: true
   });
   app.useGlobalPipes(
