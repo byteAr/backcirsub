@@ -42,6 +42,7 @@ export class TwilioService {
   private readonly twilioWhatsAppNumber: string;
   private readonly otpTemplateContentSid: string;
   private readonly credentiialActiveSid: string;
+  private readonly birthdayTemplateSid: string;
 
   // Mapa de plantillas de reintegro - Los SIDs se obtienen de variables de entorno
   private readonly plantillasReintegro: Map<MensajeWhatsappCodigo, PlantillaConfig>;
@@ -52,6 +53,7 @@ export class TwilioService {
     this.twilioWhatsAppNumber = this.configService.get<string>('TWILIO_WHATSAPP_NUMBER');
     this.otpTemplateContentSid = this.configService.get<string>('TWILIO_OTP_TEMPLATE_SID');
     this.credentiialActiveSid = this.configService.get<string>('TWILIO_NOTIFICATION_CREDENTIAL_ACTIVE');
+    this.birthdayTemplateSid = this.configService.get<string>('TWILIO_BIRTHDAY_TEMPLATE_SID');
 
     // Inicializar el mapa de plantillas de reintegro
     this.plantillasReintegro = new Map([
@@ -295,6 +297,57 @@ export class TwilioService {
           `Mensaje de notificación no se pudo enviar a ${to}`,
           null
         );
+      throw error;
+    }
+  }
+
+  /**
+   * Envía la plantilla de saludo de cumpleaños por WhatsApp
+   * @param to - Número de teléfono destino (sin el prefijo whatsapp:)
+   * @param nombre - Nombre del socio ({{1}})
+   * @param apellido - Apellido del socio ({{2}})
+   */
+  async sendBirthdayMessage(to: string, nombre: string, apellido: string): Promise<any> {
+    if (!this.birthdayTemplateSid) {
+      this.logger.error('No hay SID configurado para la plantilla de cumpleaños (TWILIO_BIRTHDAY_TEMPLATE_SID).');
+      throw new BadRequestException('Plantilla de cumpleaños no configurada.');
+    }
+
+    try {
+      this.logger.log(`Enviando saludo de cumpleaños a ${to} (${nombre} ${apellido})`);
+
+      const message = await this.twilioClient.messages.create({
+        from: this.twilioWhatsAppNumber,
+        to: `whatsapp:${to}`,
+        contentSid: this.birthdayTemplateSid,
+        contentVariables: JSON.stringify({
+          1: nombre,
+          2: apellido,
+        }),
+      });
+
+      this.logger.log(`Saludo de cumpleaños enviado exitosamente. SID: ${message.sid}`);
+
+      await this.registrarLog(
+        'USUARIOS',
+        'INFO',
+        'Saludo de cumpleaños',
+        `Mensaje de cumpleaños enviado a ${to} (${nombre} ${apellido})`,
+        null,
+      );
+
+      return { ok: true, messageSid: message.sid };
+    } catch (error) {
+      this.logger.error(`Fallo al enviar saludo de cumpleaños a ${to}: ${error.message}`);
+
+      await this.registrarLog(
+        'USUARIOS',
+        'ERROR',
+        'Saludo de cumpleaños',
+        `Error enviando saludo de cumpleaños a ${to}: ${error.message}`,
+        null,
+      );
+
       throw error;
     }
   }

@@ -16,6 +16,7 @@ import { GetUser } from './decorators/get-user.decorator';
 import { LoginUser } from './interfaces/loginUser.iterface';
 import { User } from './interfaces/getUser.interface';
 import { SendNotificationCreateCredential } from './dto/send-notification-create-credential.dto';
+import { SendBirthdayWhatsappDto } from './dto/send-birthday-whatsapp.dto';
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -224,6 +225,19 @@ async updateFile(
       codigoMensaje,
       numeroTelefono,
     );
+  }
+
+  @Post('send-birthday-whatsapp')
+  @HttpCode(HttpStatus.OK)
+  async sendBirthdayWhatsapp(@Body() sendBirthdayWhatsappDto: SendBirthdayWhatsappDto) {
+    const { phoneNumber, nombre, apellido } = sendBirthdayWhatsappDto;
+
+    try {
+      return await this.twilioService.sendBirthdayMessage(phoneNumber, nombre, apellido);
+    } catch (error) {
+      console.error('Error al enviar saludo de cumpleaños por WhatsApp:', error);
+      throw new InternalServerErrorException('No se pudo enviar el saludo de cumpleaños. Por favor, inténtalo de nuevo.');
+    }
   }
 
 }
