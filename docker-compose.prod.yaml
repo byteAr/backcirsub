@@ -11,15 +11,18 @@ services:
     restart: always
     ports:
       - "${PORT}:${PORT}" # Expone el puerto de la aplicación
-    
+
     # Carga todas las variables de entorno desde el archivo .env
     env_file:
-      - ./.env 
+      - ./.env
+
+    environment:
+      REDIS_HOST: redis
 
     # Asegura que Redis se inicie y esté "sano" antes que cirsubbackend
     depends_on:
       redis:
-        condition: service_healthy 
+        condition: service_healthy
 
   # Servicio de Redis
   redis:
