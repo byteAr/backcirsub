@@ -248,7 +248,9 @@ export class AuthService {
   private async registrarLog(modulo: string, tipo: 'INFO' | 'WARN' | 'ERROR', accion: string, observacion: string, usuario?: string | null, ip?: string | null) {
     try {
       await this.prismaService.$executeRaw`EXEC dbo.sp_sis_log_in @Modulo=${modulo}, @Tipo=${tipo}, @Accion=${accion}, @Observacion=${observacion}, @Usuario=${usuario}, @Ip=${ip};`;
-    } catch {}
+    } catch (error: any) {
+      console.error('registrarLog falló:', error?.message ?? error);
+    }
   }
 
   private getJWT(payload: JwtPayload) { return this.jwtService.sign(payload); }
@@ -344,18 +346,28 @@ export class AuthService {
       // if (!isValid) return { ok: false, message: 'Rostro no detectado' };
 
 
+      console.log('=== DEBUG saveImage ===');
+      console.log('Personas_Id:', personasId, 'bytes foto:', file.buffer.length);
+
       const request = pool.request();
       request.input('Personas_Id', sql.Int, personasId).input('Foto_1', sql.VarBinary(sql.MAX), file.buffer).input('Activo', sql.Bit, true);
       const result = await request.execute('sp_Personas_foto_IN');
+
+      console.log('result.recordsets crudo:', JSON.stringify(result.recordsets));
+      console.log('result.recordset crudo:', JSON.stringify(result.recordset));
+      console.log('result.rowsAffected:', result.rowsAffected);
 
       const firstRow = result.recordset?.[0];
       const spResponseRaw = firstRow ? Object.values(firstRow)[0] : null;
       let spResponse: SpHashResponse | null = null;
       try {
         spResponse = spResponseRaw ? JSON.parse(spResponseRaw as string) : null;
-      } catch {
+      } catch (parseErr) {
+        console.log('Error parseando respuesta del SP:', parseErr);
         spResponse = null;
       }
+      console.log('spResponse parsed saveImage:', spResponse);
+      console.log('=== FIN DEBUG saveImage ===');
 
       if (!spResponse?.ok) {
         await this.registrarLog('USUARIOS', 'ERROR', 'Carga foto perfil', `SP guardó foto falló, PersonasId=${personasId}: ${spResponse?.mensaje ?? 'sin respuesta del SP'}`, usuario, ip);
