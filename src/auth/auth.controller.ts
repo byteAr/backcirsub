@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { Controller, Get, Post, Body, Patch, Param, Delete, InternalServerErrorException, NotFoundException, HttpStatus,  HttpCode, UseInterceptors, UploadedFile, BadRequestException, UseGuards, Req, Res, } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, InternalServerErrorException, NotFoundException, HttpStatus,  HttpCode, UseInterceptors, UploadedFile, BadRequestException, UseGuards, Req, Res, Ip, } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 import { AuthService } from './auth.service';
@@ -25,8 +25,8 @@ export class AuthController {
   ) {}
 
   @Post('login')
-  create(@Body() loginUserDto: LoginUserDto) {
-    return this.authService.login(loginUserDto);
+  create(@Body() loginUserDto: LoginUserDto, @Ip() ip: string) {
+    return this.authService.login(loginUserDto, ip);
   }
 
 
@@ -44,8 +44,8 @@ export class AuthController {
   
 
   @Post('register')
-  createUser(@Body() createUserDto:CreateUserDto){    
-    return this.authService.register( createUserDto)
+  createUser(@Body() createUserDto:CreateUserDto, @Ip() ip: string){
+    return this.authService.register( createUserDto, ip)
   }
 
   @Post('addpersona')
@@ -56,11 +56,11 @@ export class AuthController {
   /* otp */
   @Post('send-otp')
   @HttpCode(HttpStatus.OK)
-  async sendOtp(@Body() sendOtpDto: SendOtpDto) {
-    
-  
+  async sendOtp(@Body() sendOtpDto: SendOtpDto, @Ip() ip: string) {
+
+
     const { phoneNumber } = sendOtpDto;
-  
+
 
     const otp = this.authService.generateOtp();
     await this.authService.saveOtp(phoneNumber, otp);
@@ -68,9 +68,11 @@ export class AuthController {
   // ¡NUEVA FORMA DE LLAMAR A TwilioService!
   try {
     await this.twilioService.sendWhatsAppMessage(phoneNumber, otp); // Pasamos directamente el OTP
+    await this.authService.logOtpEvent('INFO', phoneNumber, `OTP enviado a ${phoneNumber}`, ip);
     return { message: 'OTP enviada exitosamente.' };
   } catch (error) {
     console.error('Error al enviar OTP por WhatsApp:', error);
+    await this.authService.logOtpEvent('ERROR', phoneNumber, `Error enviando OTP a ${phoneNumber}: ${error.message}`, ip);
     throw new InternalServerErrorException('No se pudo enviar la OTP. Por favor, inténtalo de nuevo.');
   }
 }
@@ -96,11 +98,11 @@ export class AuthController {
 
   @Post('verify-otp') // Ruta para verificar OTP, ej. POST /auth/verify-otp
   @HttpCode(HttpStatus.OK) // Devolvemos 200 OK si la OTP es válida
-  async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto) {
+  async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto, @Ip() ip: string) {
     const { phoneNumber, otp } = verifyOtpDto;
 
     // Verificar la OTP utilizando el servicio de autenticación
-    const isValid = await this.authService.verifyOtp(phoneNumber, otp);
+    const isValid = await this.authService.verifyOtp(phoneNumber, otp, ip);
 
     if (isValid) {
       // Si la OTP es válida, respondemos con éxito
@@ -131,9 +133,9 @@ export class AuthController {
   }
 
   @Post('verify-dni')
-  verifyDni(@Body('dni') dni:string, @Body('telefono') telefono:string){  
-         
-    return this.authService.obtenerPersonaPorDni( dni, telefono)
+  verifyDni(@Body('dni') dni:string, @Body('telefono') telefono:string, @Ip() ip: string){
+
+    return this.authService.obtenerPersonaPorDni( dni, telefono, ip)
   }
 
   @Post('verify-repass')
@@ -146,7 +148,8 @@ export class AuthController {
   @UseInterceptors(FileInterceptor('profilePicture'))
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
-    @Body('userId') userId: string
+    @Body('userId') userId: string,
+    @Ip() ip: string,
   ) {
     console.log('este es el id de usuario',userId);
 
@@ -155,7 +158,7 @@ export class AuthController {
       throw new BadRequestException('userId inválido');
     }
 
-    return this.authService.saveImage(file, parsedId);
+    return this.authService.saveImage(file, parsedId, ip);
   }
 
 
@@ -164,7 +167,8 @@ export class AuthController {
 @UseInterceptors(FileInterceptor('profilePicture'))
 async updateFile(
   @UploadedFile() file: Express.Multer.File,
-  @Body('userId') userId: string
+  @Body('userId') userId: string,
+  @Ip() ip: string,
 ) {
   console.log('🧪 DEBUG UPDATE IMAGE');
   console.log('userId:', userId);
@@ -183,7 +187,7 @@ async updateFile(
     throw new BadRequestException('userId inválido');
   }
 
-  return this.authService.updateImage(file, parsedId);
+  return this.authService.updateImage(file, parsedId, ip);
 }
 
   

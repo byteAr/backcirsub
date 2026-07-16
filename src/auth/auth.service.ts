@@ -100,15 +100,18 @@ export class AuthService {
     }
   }
 
-  async register(createUserDto: CreateUserDto): Promise<any> {
+  async register(createUserDto: CreateUserDto, ip?: string): Promise<any> {
     console.log('llega hasta acá');
     const { dni, password } = createUserDto;
     try {
       console.log('=== DEBUG REGISTER ===');
       console.log('DNI:', dni);
-      
+
       const rawResponse = await this.perfilCompleto(dni);
-      if (!rawResponse?.length || !rawResponse[0]['Json']) throw new NotFoundException('DNI no registrado');
+      if (!rawResponse?.length || !rawResponse[0]['Json']) {
+        await this.registrarLog('USUARIOS', 'WARN', 'Registro usuario', `DNI no registrado: ${dni}`, dni, ip);
+        throw new NotFoundException('DNI no registrado');
+      }
 
       const userData = JSON.parse(rawResponse[0]['Json']);
       const persona = userData.Persona[0];
@@ -122,7 +125,10 @@ export class AuthService {
 
       console.log('registerResult raw:', registerResult);
 
-      if (!registerResult?.length) throw new InternalServerErrorException('Error BD Registro');
+      if (!registerResult?.length) {
+        await this.registrarLog('USUARIOS', 'ERROR', 'Registro usuario', `Sin respuesta del SP de registro: ${dni}`, dni, ip);
+        throw new InternalServerErrorException('Error BD Registro');
+      }
 
       const firstRow = registerResult[0];
       console.log('firstRow:', firstRow);
@@ -135,16 +141,19 @@ export class AuthService {
 
       if (!spResponse.ok) {
         console.log('SP devolvió ok: false, mensaje:', spResponse.mensaje);
+        await this.registrarLog('USUARIOS', 'ERROR', 'Registro usuario', `SP registro falló (${dni}): ${spResponse.mensaje}`, dni, ip);
         throw new BadRequestException(spResponse.mensaje);
       }
 
       console.log('Registro exitoso, generando token...');
       const result = { ok: true, token: this.getJWT({ id: persona.Id, dni }), userData };
+      await this.registrarLog('USUARIOS', 'INFO', 'Registro usuario', `Registro OK: ${dni}`, dni, ip);
       console.log('=== FIN DEBUG REGISTER ===');
       return result;
     } catch (error: any) {
       console.error('Error en register:', error.message);
       if (error instanceof HttpException) throw error;
+      await this.registrarLog('USUARIOS', 'ERROR', 'Registro usuario', `Error inesperado (${dni}): ${error.message}`, dni, ip);
       throw new InternalServerErrorException('Error en registro');
     }
   }
@@ -214,15 +223,18 @@ export class AuthService {
     return { ok: false };
   }
 
-  async updateImage(file: Express.Multer.File, personasId: number) {
+  async updateImage(file: Express.Multer.File, personasId: number, ip?: string) {
     if (!file) throw new BadRequestException('No se recibió archivo.');
+    const usuario = `PersonasId:${personasId}`;
     try {
       const result = await this.prismaService.$executeRaw`
         EXEC Personas_foto_AC @Personas_Id = ${personasId}, @Foto_1 = ${file.buffer};
       `;
+      await this.registrarLog('USUARIOS', 'INFO', 'Actualización foto perfil', `Foto actualizada OK, PersonasId=${personasId}`, usuario, ip);
       return { message: 'Imagen guardada correctamente', dbResponse: result };
     } catch (error) {
       console.log(error)
+      await this.registrarLog('USUARIOS', 'ERROR', 'Actualización foto perfil', `Error actualizando foto, PersonasId=${personasId}: ${error.message}`, usuario, ip);
       throw new InternalServerErrorException('No se pudo actualizar la imagen.');
     }
   }
@@ -252,16 +264,25 @@ export class AuthService {
     await this.redisService.set(`otp:${phoneNumber}`, otp, this.OTP_EXPIRATION_SECONDS);
   }
 
-  async verifyOtp(phoneNumber: string, otp: string): Promise<boolean> {
+  async verifyOtp(phoneNumber: string, otp: string, ip?: string): Promise<boolean> {
     const key = `otp:${phoneNumber}`;
     const storedOtp = await this.redisService.get(key);
-    if (storedOtp === otp) { return true; }
+    if (storedOtp === otp) {
+      await this.registrarLog('USUARIOS', 'INFO', 'Verificación OTP', `OTP verificada OK: ${phoneNumber}`, phoneNumber, ip);
+      return true;
+    }
+    await this.registrarLog('USUARIOS', 'WARN', 'Verificación OTP', `OTP inválida o expirada: ${phoneNumber}`, phoneNumber, ip);
     return false;
   }
 
-  async obtenerPersonaPorDni(dni: string, telefono: string): Promise<any> {
+  async logOtpEvent(tipo: 'INFO' | 'WARN' | 'ERROR', phoneNumber: string, observacion: string, ip?: string) {
+    await this.registrarLog('USUARIOS', tipo, 'Envío OTP', observacion, phoneNumber, ip);
+  }
+
+  async obtenerPersonaPorDni(dni: string, telefono: string, ip?: string): Promise<any> {
     const rawResponse = await this.perfilCompleto(dni);
     if (!rawResponse.length) {
+      await this.registrarLog('USUARIOS', 'WARN', 'Verificación DNI', `DNI no encontrado: ${dni}`, dni, ip);
       return { ok: false, reason: 'DNI no encontrado en la base de datos', debug: { dni } };
     }
     
@@ -285,17 +306,20 @@ export class AuthService {
     if (loginVacio || (usuarioNoRegistrado && telefonoCoincide)) {
       const personasId = userData.Persona[0].Id;
       await this.redisService.set(`otp:reg:${personasId}`, telefono, this.OTP_EXPIRATION_SECONDS);
+      await this.registrarLog('USUARIOS', 'INFO', 'Verificación DNI', `DNI verificado, apto para registro: ${dni}`, dni, ip);
       return { ok: true, userData };
     }
-    
+
     // Devolver información sobre por qué falló
-    return { 
-      ok: false, 
-      reason: usuarioNoRegistrado === false 
-        ? 'El usuario ya está registrado' 
-        : !telefonoCoincide 
-          ? 'El teléfono no coincide con el registrado' 
-          : 'Condición no cumplida',
+    const reason = usuarioNoRegistrado === false
+      ? 'El usuario ya está registrado'
+      : !telefonoCoincide
+        ? 'El teléfono no coincide con el registrado'
+        : 'Condición no cumplida';
+    await this.registrarLog('USUARIOS', 'WARN', 'Verificación DNI', `${reason}: ${dni}`, dni, ip);
+    return {
+      ok: false,
+      reason,
       debug: {
         loginVacio,
         usuarioNoRegistrado,
@@ -311,8 +335,9 @@ export class AuthService {
     return { ok: true };
   }
 
-  async saveImage(file: Express.Multer.File, personasId: number) {
+  async saveImage(file: Express.Multer.File, personasId: number, ip?: string) {
     const pool = await sql.connect(sqlConfig);
+    const usuario = `PersonasId:${personasId}`;
     try {
       // Reconocimiento facial de AWS Rekognition deshabilitado temporalmente.
       // const isValid = await this.awsRekognitionService.validateSingleFaceVisible(file.buffer);
@@ -337,7 +362,11 @@ export class AuthService {
         await this.redisService.del(`otp:reg:${personasId}`);
       }
 
+      await this.registrarLog('USUARIOS', 'INFO', 'Carga foto perfil', `Foto guardada OK, usuario activado, PersonasId=${personasId}`, usuario, ip);
       return { ok: true, dbResponse: result.recordset };
+    } catch (error: any) {
+      await this.registrarLog('USUARIOS', 'ERROR', 'Carga foto perfil', `Error guardando foto, PersonasId=${personasId}: ${error.message}`, usuario, ip);
+      throw error;
     } finally { await pool.close(); }
   }
 
