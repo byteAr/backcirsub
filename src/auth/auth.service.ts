@@ -348,6 +348,20 @@ export class AuthService {
       request.input('Personas_Id', sql.Int, personasId).input('Foto_1', sql.VarBinary(sql.MAX), file.buffer).input('Activo', sql.Bit, true);
       const result = await request.execute('sp_Personas_foto_IN');
 
+      const firstRow = result.recordset?.[0];
+      const spResponseRaw = firstRow ? Object.values(firstRow)[0] : null;
+      let spResponse: SpHashResponse | null = null;
+      try {
+        spResponse = spResponseRaw ? JSON.parse(spResponseRaw as string) : null;
+      } catch {
+        spResponse = null;
+      }
+
+      if (!spResponse?.ok) {
+        await this.registrarLog('USUARIOS', 'ERROR', 'Carga foto perfil', `SP guardó foto falló, PersonasId=${personasId}: ${spResponse?.mensaje ?? 'sin respuesta del SP'}`, usuario, ip);
+        throw new InternalServerErrorException(spResponse?.mensaje || 'No se pudo guardar la foto.');
+      }
+
       // Activar el usuario en sis_Usuarios después de guardar la foto exitosamente
       await this.prismaService.$executeRaw`
         UPDATE sis_Usuarios
@@ -365,7 +379,9 @@ export class AuthService {
       await this.registrarLog('USUARIOS', 'INFO', 'Carga foto perfil', `Foto guardada OK, usuario activado, PersonasId=${personasId}`, usuario, ip);
       return { ok: true, dbResponse: result.recordset };
     } catch (error: any) {
-      await this.registrarLog('USUARIOS', 'ERROR', 'Carga foto perfil', `Error guardando foto, PersonasId=${personasId}: ${error.message}`, usuario, ip);
+      if (!(error instanceof HttpException)) {
+        await this.registrarLog('USUARIOS', 'ERROR', 'Carga foto perfil', `Error guardando foto, PersonasId=${personasId}: ${error.message}`, usuario, ip);
+      }
       throw error;
     } finally { await pool.close(); }
   }
