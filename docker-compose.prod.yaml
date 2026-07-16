@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Servicio de tu aplicación NestJS (Backend)
   cirsubbackend:
@@ -19,27 +17,11 @@ services:
     environment:
       REDIS_HOST: redis
 
-    # Asegura que Redis se inicie y esté "sano" antes que cirsubbackend
-    depends_on:
-      redis:
-        condition: service_healthy
-
-  # Servicio de Redis
-  redis:
-    image: redis:latest
-    container_name: cirsubbackend-redis
-    restart: always
-    environment: # Pasa la contraseña de Redis como variable de entorno
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-    command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"} # Establece la contraseña y persistencia AOF, solo si REDIS_PASSWORD no está vacío
-    volumes:
-      - redis_data:/data
-    healthcheck: # Healthcheck para Redis
-      test: ["CMD", "redis-cli", "--raw", "GET", "healthcheck"] # Un simple test de salud
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-# Definición de volúmenes para persistencia de datos
-volumes:
-  redis_data:
+# Redis es compartido con otros servicios (contenedor "cirsubbackend-redis" en
+# la red cirsub_default, administrado fuera de este compose). No se define
+# aquí un servicio "redis:" propio para no chocar con ese contenedor por
+# nombre en cada deploy.
+networks:
+  default:
+    name: cirsub_default
+    external: true
