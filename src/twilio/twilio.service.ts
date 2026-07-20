@@ -43,6 +43,8 @@ export class TwilioService {
   private readonly otpTemplateContentSid: string;
   private readonly credentiialActiveSid: string;
   private readonly birthdayTemplateSid: string;
+  private readonly birthdayTemplateBlancoSid: string;
+  private readonly birthdayTemplateVerdeSid: string;
 
   // Mapa de plantillas de reintegro - Los SIDs se obtienen de variables de entorno
   private readonly plantillasReintegro: Map<MensajeWhatsappCodigo, PlantillaConfig>;
@@ -54,6 +56,8 @@ export class TwilioService {
     this.otpTemplateContentSid = this.configService.get<string>('TWILIO_OTP_TEMPLATE_SID');
     this.credentiialActiveSid = this.configService.get<string>('TWILIO_NOTIFICATION_CREDENTIAL_ACTIVE');
     this.birthdayTemplateSid = this.configService.get<string>('TWILIO_BIRTHDAY_TEMPLATE_SID');
+    this.birthdayTemplateBlancoSid = this.configService.get<string>('TWILIO_BIRTHDAY_TEMPLATE_BLANCO_SID');
+    this.birthdayTemplateVerdeSid = this.configService.get<string>('TWILIO_BIRTHDAY_TEMPLATE_VERDE_SID');
 
     // Inicializar el mapa de plantillas de reintegro
     this.plantillasReintegro = new Map([
@@ -345,6 +349,69 @@ export class TwilioService {
         'ERROR',
         'Saludo de cumpleaños',
         `Error enviando saludo de cumpleaños a ${to}: ${error.message}`,
+        null,
+      );
+
+      throw error;
+    }
+  }
+
+  /**
+   * Envía la plantilla de saludo de cumpleaños por WhatsApp, eligiendo entre variante "blanco" o "verde"
+   * @param to - Número de teléfono destino (sin el prefijo whatsapp:)
+   * @param nombre - Nombre del socio ({{1}})
+   * @param apellido - Apellido del socio ({{2}})
+   * @param plantilla - Variante de plantilla a usar: "blanco" o "verde"
+   */
+  async sendBirthdayMessageConPlantilla(
+    to: string,
+    nombre: string,
+    apellido: string,
+    plantilla: 'blanco' | 'verde',
+  ): Promise<any> {
+    const sidPorPlantilla: Record<'blanco' | 'verde', string> = {
+      blanco: this.birthdayTemplateBlancoSid,
+      verde: this.birthdayTemplateVerdeSid,
+    };
+    const contentSid = sidPorPlantilla[plantilla];
+
+    if (!contentSid) {
+      this.logger.error(`No hay SID configurado para la plantilla de cumpleaños "${plantilla}".`);
+      throw new BadRequestException(`Plantilla de cumpleaños "${plantilla}" no configurada.`);
+    }
+
+    try {
+      this.logger.log(`Enviando saludo de cumpleaños (plantilla ${plantilla}) a ${to} (${nombre} ${apellido})`);
+
+      const message = await this.twilioClient.messages.create({
+        from: this.twilioWhatsAppNumber,
+        to: `whatsapp:${to}`,
+        contentSid,
+        contentVariables: JSON.stringify({
+          1: nombre,
+          2: apellido,
+        }),
+      });
+
+      this.logger.log(`Saludo de cumpleaños (plantilla ${plantilla}) enviado exitosamente. SID: ${message.sid}`);
+
+      await this.registrarLog(
+        'USUARIOS',
+        'INFO',
+        'Saludo de cumpleaños',
+        `Mensaje de cumpleaños (plantilla ${plantilla}) enviado a ${to} (${nombre} ${apellido})`,
+        null,
+      );
+
+      return { ok: true, messageSid: message.sid };
+    } catch (error) {
+      this.logger.error(`Fallo al enviar saludo de cumpleaños (plantilla ${plantilla}) a ${to}: ${error.message}`);
+
+      await this.registrarLog(
+        'USUARIOS',
+        'ERROR',
+        'Saludo de cumpleaños',
+        `Error enviando saludo de cumpleaños (plantilla ${plantilla}) a ${to}: ${error.message}`,
         null,
       );
 
