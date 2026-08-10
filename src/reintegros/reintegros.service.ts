@@ -54,10 +54,15 @@ export class ReintegrosService {
       const extension = this.validarExtension(nombreOriginal, file.mimetype);
       const base = this.sanitizarBase(nombreOriginal, extension);
 
-      // Formato: <TIPO><idUsuario><nombreOriginal>_<timestamp><extension>
-      //          -> RM4receta_20260810143052871.jpg
+      // Formato: <TIPO>-<idUsuario>-<nombreOriginal>-<timestamp><extension>
+      //          -> RM-4-FOTO1-20260810143052871.jpg
+      //
+      // El guion separa los cuatro datos. Como sanitizarBase() convierte los
+      // guiones del nombre original en guiones bajos, el nombre siempre se
+      // parte en exactamente cuatro campos y no hay forma de confundir el id
+      // del socio con un archivo que se llame solo con números.
       const nombreArchivo = await this.resolverNombreLibre(
-        `${tipoDocumento}${personasId}${base}_${this.marcaDeTiempo()}`,
+        [tipoDocumento, personasId, base, this.marcaDeTiempo()].join('-'),
         extension,
       );
 
@@ -128,7 +133,12 @@ export class ReintegrosService {
     return extension;
   }
 
-  /** Nombre sin extensión, sin acentos ni caracteres que rompan una ruta. */
+  /**
+   * Nombre sin extensión, sin acentos ni caracteres que rompan una ruta.
+   *
+   * Los guiones del nombre original pasan a guion bajo: el guion queda
+   * reservado como separador de los campos del nombre final.
+   */
   private sanitizarBase(nombreOriginal: string, extension: string): string {
     const base = nombreOriginal.slice(
       0,
@@ -138,9 +148,9 @@ export class ReintegrosService {
     const limpio = base
       .normalize('NFD')
       .replace(DIACRITICOS, '')
-      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/[^a-zA-Z0-9._]/g, '_')
       .replace(/_{2,}/g, '_')
-      .replace(/^[._-]+/, '')
+      .replace(/^[._]+/, '')
       .slice(0, 80);
 
     return limpio || 'documento';
