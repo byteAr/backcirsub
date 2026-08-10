@@ -17,6 +17,11 @@ services:
     environment:
       REDIS_HOST: redis
 
+    volumes:
+      # Documentación de solicitudes de reintegro.
+      # Misma ruta dentro y fuera del contenedor para que los archivos queden en el host.
+      - ${REINTEGROS_UPLOAD_PATH:-/usr/local/proyectos/docsreintegros}:${REINTEGROS_UPLOAD_PATH:-/usr/local/proyectos/docsreintegros}
+
 # Redis es compartido con otros servicios (contenedor "cirsubbackend-redis" en
 # la red cirsub_default, administrado fuera de este compose). No se define
 # aquí un servicio "redis:" propio para no chocar con ese contenedor por

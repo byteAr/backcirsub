@@ -10,6 +10,7 @@ import { TwilioModule } from './twilio/twilio.module';
 import { CredencialModule } from './credencial/credencial.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { AdminNotificationsModule } from './admin-notifications/admin-notifications.module';
+import { ReintegrosModule } from './reintegros/reintegros.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AdminNotificationsModule } from './admin-notifications/admin-notificati
     CredencialModule,
     PushNotificationsModule,
     AdminNotificationsModule,
+    ReintegrosModule,
   ],
   controllers: [AppController],
   providers: [AppService],
