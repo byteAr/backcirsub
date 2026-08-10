@@ -32,7 +32,7 @@ export class ReintegrosController {
   @Get('tipos-documento')
   getTiposDocumento() {
     return Object.entries(TIPOS_DOCUMENTO_REINTEGRO).map(
-      ([codigo, descripcion]) => ({ codigo, descripcion }),
+      ([codigo, { descripcion }]) => ({ codigo, descripcion }),
     );
   }
 
@@ -67,6 +67,7 @@ export class ReintegrosController {
       files,
       uploadReintegroDto.tipoDocumento,
       user.id,
+      user.dni,
     );
   }
 }

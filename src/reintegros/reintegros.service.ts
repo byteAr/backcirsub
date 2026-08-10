@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -9,8 +10,10 @@ import { constants as fsConstants } from 'fs';
 import { access, mkdir, writeFile } from 'fs/promises';
 import { basename, extname, join } from 'path';
 
+import { AuthService } from '../auth/auth.service';
 import {
   EXTENSIONES_PERMITIDAS,
+  TIPOS_DOCUMENTO_REINTEGRO,
   TipoDocumentoReintegro,
 } from './constants/tipos-documento';
 
@@ -30,7 +33,10 @@ export class ReintegrosService {
   private readonly logger = new Logger(ReintegrosService.name);
   private readonly rutaDestino: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly authService: AuthService,
+  ) {
     this.rutaDestino =
       this.configService.get<string>('REINTEGROS_UPLOAD_PATH') ??
       '/usr/local/proyectos/docsreintegros';
@@ -40,10 +46,13 @@ export class ReintegrosService {
     files: Express.Multer.File[],
     tipoDocumento: TipoDocumentoReintegro,
     personasId: number,
+    dni: string,
   ): Promise<{ ok: boolean; archivos: ArchivoReintegroGuardado[] }> {
     if (!files?.length) {
       throw new BadRequestException('No se recibió ningún documento');
     }
+
+    await this.verificarBeneficio(tipoDocumento, personasId, dni);
 
     await this.asegurarDirectorio();
 
@@ -92,6 +101,56 @@ export class ReintegrosService {
     );
 
     return { ok: true, archivos: guardados };
+  }
+
+  /**
+   * Solo puede cargar documentación quien tenga activo el beneficio que ese
+   * tipo de documento exige (una receta médica requiere farmacia).
+   *
+   * La pantalla ya esconde el botón al socio sin el beneficio, pero eso es
+   * cosmético: el endpoint es alcanzable con cualquier token válido. La fuente
+   * de verdad es el perfil que devuelve el SP, no lo que mande el cliente.
+   */
+  private async verificarBeneficio(
+    tipoDocumento: TipoDocumentoReintegro,
+    personasId: number,
+    dni: string,
+  ) {
+    const definicion = TIPOS_DOCUMENTO_REINTEGRO[tipoDocumento];
+    if (!definicion) {
+      throw new BadRequestException('Tipo de documento no reconocido');
+    }
+
+    let beneficios: Record<string, unknown>[];
+
+    try {
+      const perfil = await this.authService.perfilCompleto(dni);
+      const json = perfil?.[0]?.['Json'];
+      if (!json) throw new Error('El perfil vino vacío');
+
+      beneficios = JSON.parse(json)?.Beneficios ?? [];
+    } catch (error) {
+      this.logger.error(
+        `No se pudo verificar el beneficio del socio ${personasId}`,
+        error as Error,
+      );
+      throw new InternalServerErrorException(
+        'No se pudo validar su beneficio. Intente nuevamente en unos minutos.',
+      );
+    }
+
+    const habilitado = beneficios.some(
+      (beneficio) => beneficio?.[definicion.beneficio] === true,
+    );
+
+    if (!habilitado) {
+      this.logger.warn(
+        `Socio ${personasId} (DNI ${dni}) intentó cargar ${tipoDocumento} sin el beneficio "${definicion.beneficio}"`,
+      );
+      throw new ForbiddenException(
+        `No cuenta con el beneficio necesario para solicitar este reintegro.`,
+      );
+    }
   }
 
   private async asegurarDirectorio() {

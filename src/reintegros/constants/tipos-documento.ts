@@ -1,11 +1,27 @@
 /**
+ * Claves de beneficio tal como vienen en el JSON de sp_Perfil_completo_detallado
+ * (userData.Beneficios): far = farmacia, sep = sepelio, eva = evacuación,
+ * seg = seguro.
+ */
+export type ClaveBeneficio = 'far' | 'sep' | 'eva' | 'seg';
+
+export interface DefinicionTipoDocumento {
+  descripcion: string;
+  /** Beneficio que el socio debe tener activo para poder cargar este tipo. */
+  beneficio: ClaveBeneficio;
+}
+
+/**
  * Tipos de documento que se pueden adjuntar a una solicitud de reintegro.
  * El código es el prefijo que lleva el archivo guardado en disco.
- * Para agregar un tipo nuevo basta con sumarlo a este mapa.
+ *
+ * Para agregar un tipo nuevo basta con sumarlo a este mapa indicando qué
+ * beneficio exige: la validación de permisos sale de acá, no hay que tocar
+ * el controller ni el service.
  */
-export const TIPOS_DOCUMENTO_REINTEGRO = {
-  RM: 'Receta Médica',
-} as const;
+export const TIPOS_DOCUMENTO_REINTEGRO: Record<string, DefinicionTipoDocumento> = {
+  RM: { descripcion: 'Receta Médica', beneficio: 'far' },
+};
 
 export type TipoDocumentoReintegro = keyof typeof TIPOS_DOCUMENTO_REINTEGRO;
 
