@@ -22,6 +22,9 @@ export interface ArchivoReintegroGuardado {
 
 const DIACRITICOS = /[̀-ͯ]/g;
 
+/** Zona de referencia para el timestamp del nombre de archivo. */
+const ZONA_HORARIA = 'America/Argentina/Buenos_Aires';
+
 @Injectable()
 export class ReintegrosService {
   private readonly logger = new Logger(ReintegrosService.name);
@@ -143,19 +146,44 @@ export class ReintegrosService {
     return limpio || 'documento';
   }
 
-  /** Fecha y hora local del server: AAAAMMDDHHmmssSSS. */
+  /**
+   * Fecha y hora de Argentina en formato AAAAMMDDHHmmssSSS.
+   *
+   * La zona va fija y no se toma del reloj del contenedor: el host corre en
+   * horario del este de EE.UU. y el contenedor en UTC, así que confiar en la
+   * hora local daría un nombre con la hora corrida. Los datos de zona salen
+   * del ICU que trae Node, no del sistema, así que esto funciona en Alpine
+   * sin instalar tzdata.
+   */
   private marcaDeTiempo(): string {
     const ahora = new Date();
-    const pad = (valor: number, largo = 2) => `${valor}`.padStart(largo, '0');
+
+    const partes = new Intl.DateTimeFormat('en-CA', {
+      timeZone: ZONA_HORARIA,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(ahora)
+      .reduce<Record<string, string>>((acc, parte) => {
+        acc[parte.type] = parte.value;
+        return acc;
+      }, {});
+
+    const milisegundos = `${ahora.getMilliseconds()}`.padStart(3, '0');
 
     return [
-      ahora.getFullYear(),
-      pad(ahora.getMonth() + 1),
-      pad(ahora.getDate()),
-      pad(ahora.getHours()),
-      pad(ahora.getMinutes()),
-      pad(ahora.getSeconds()),
-      pad(ahora.getMilliseconds(), 3),
+      partes.year,
+      partes.month,
+      partes.day,
+      partes.hour,
+      partes.minute,
+      partes.second,
+      milisegundos,
     ].join('');
   }
 
