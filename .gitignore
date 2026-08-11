@@ -38,7 +38,10 @@ lerna-debug.log*
 !.vscode/extensions.json
 
 # dotenv environment variable files
-.env
+# Cualquier .env real queda afuera (traen credenciales de base y JWT secret).
+# Las plantillas .example sí se versionan.
+.env*
+!.env*.example
 .env.development.local
 .env.test.local
 .env.production.local

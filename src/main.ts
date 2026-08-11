@@ -5,9 +5,17 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  // Orígenes extra separados por coma, para entornos que no viven bajo el
+  // dominio público (por ejemplo staging en una IP privada tras la VPN).
+  const origenesExtra = (process.env.CORS_EXTRA_ORIGINS ?? '')
+    .split(',')
+    .map((origen) => origen.trim())
+    .filter(Boolean);
+
   const allowedOrigins = [
     'http://localhost:4200',
     /^https:\/\/([a-z0-9-]+\.)*cirsubgn\.org\.ar$/,
+    ...origenesExtra,
   ];
 
   app.enableCors({

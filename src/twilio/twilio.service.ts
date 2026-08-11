@@ -39,6 +39,8 @@ interface PlantillaConfig {
 export class TwilioService {
   private twilioClient: twilio.Twilio;
   private readonly logger = new Logger(TwilioService.name);
+  /** false en staging: se loguea el mensaje en vez de enviarlo. */
+  private readonly habilitado: boolean;
   private readonly twilioWhatsAppNumber: string;
   private readonly otpTemplateContentSid: string;
   private readonly credentiialActiveSid: string;
@@ -126,6 +128,20 @@ export class TwilioService {
       }],
     ]);
 
+    // En staging no queremos que salga un solo WhatsApp a un socio real, así que
+    // el cliente se reemplaza por uno simulado y ni siquiera se exigen las
+    // credenciales. Se apaga con TWILIO_HABILITADO=false; por defecto va prendido.
+    this.habilitado =
+      this.configService.get<string>('TWILIO_HABILITADO') !== 'false';
+
+    if (!this.habilitado) {
+      this.logger.warn(
+        'TWILIO_HABILITADO=false: los mensajes de WhatsApp se registran en el log pero NO se envían.',
+      );
+      this.twilioClient = this.crearClienteSimulado();
+      return;
+    }
+
     // 🔴 VALIDAMOS TAMBIÉN EL SID DE LA NOTIFICACIÓN
     if (
       !accountSid ||
@@ -148,6 +164,37 @@ export class TwilioService {
     }
 
     this.twilioClient = twilio(accountSid, authToken);
+  }
+
+  /** ¿Este entorno tiene permitido enviar mensajes de verdad? */
+  get envioHabilitado(): boolean {
+    return this.habilitado;
+  }
+
+  /**
+   * Reemplazo del cliente de Twilio para los entornos donde no se debe enviar
+   * nada. Respeta la forma que usan los métodos de esta clase
+   * (`messages.create`), así no hay que tocar cada punto de envío ni queda
+   * ninguno suelto por olvido.
+   */
+  private crearClienteSimulado(): twilio.Twilio {
+    const logger = this.logger;
+
+    return {
+      messages: {
+        create: async (opciones: any) => {
+          logger.warn(
+            `[TWILIO SIMULADO] No se envía nada. to=${opciones?.to} contentSid=${opciones?.contentSid} variables=${opciones?.contentVariables ?? '{}'}`,
+          );
+
+          return {
+            sid: `SIMULADO-${Date.now()}`,
+            status: 'simulado',
+            to: opciones?.to,
+          };
+        },
+      },
+    } as unknown as twilio.Twilio;
   }
 
   /**
