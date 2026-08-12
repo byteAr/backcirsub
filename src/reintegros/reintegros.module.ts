@@ -1,3 +1,4 @@
+import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
@@ -6,7 +7,7 @@ import { ReintegrosController } from './reintegros.controller';
 import { ReintegrosService } from './reintegros.service';
 
 @Module({
-  imports: [ConfigModule, AuthModule],
+  imports: [ConfigModule, AuthModule, HttpModule],
   controllers: [ReintegrosController],
   providers: [ReintegrosService],
   exports: [ReintegrosService],

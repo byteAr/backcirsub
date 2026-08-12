@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { UpdateCredencialDto } from './dto/update-credencial.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from 'src/auth/auth.service';
+import { buildGestionApiKey } from '../common/gestion-api-key';
 
 @Injectable()
 export class CredencialService {
@@ -30,20 +31,9 @@ export class CredencialService {
     return `This action updates a #${id} credencial`;
   }
 
+  /** Delega en el helper compartido con reintegros, para no duplicar la clave. */
   private buildApiKey(): string {
-    const now = new Date();
-    const parts = new Intl.DateTimeFormat('es-AR', {
-      timeZone: 'America/Argentina/Buenos_Aires',
-      day: '2-digit',
-      month: '2-digit',
-      year: '2-digit',
-    }).formatToParts(now);
-
-    const dd = parts.find(p => p.type === 'day')!.value;
-    const mm = parts.find(p => p.type === 'month')!.value;
-    const yy = parts.find(p => p.type === 'year')!.value;
-
-    const key = `api-key-tk-${dd}${mm}${yy}`;
+    const key = buildGestionApiKey();
     console.log('API KEY generada:', key);
     return key;
   }

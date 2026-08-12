@@ -10,12 +10,24 @@ import { constants as fsConstants } from 'fs';
 import { access, mkdir, writeFile } from 'fs/promises';
 import { basename, extname, join } from 'path';
 
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
+
 import { AuthService } from '../auth/auth.service';
+import {
+  buildGestionApiKey,
+  GESTION_API_BASE,
+} from '../common/gestion-api-key';
 import {
   EXTENSIONES_PERMITIDAS,
   TIPOS_DOCUMENTO_REINTEGRO,
   TipoDocumentoReintegro,
 } from './constants/tipos-documento';
+import {
+  EstadoOrdenPago,
+  OrdenPago,
+  OrdenPagoPhp,
+} from './entities/orden-pago.entity';
 
 export interface ArchivoReintegroGuardado {
   nombreOriginal: string;
@@ -36,6 +48,7 @@ export class ReintegrosService {
   constructor(
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
+    private readonly httpService: HttpService,
   ) {
     this.rutaDestino =
       this.configService.get<string>('REINTEGROS_UPLOAD_PATH') ??
@@ -101,6 +114,95 @@ export class ReintegrosService {
     );
 
     return { ok: true, archivos: guardados };
+  }
+
+  /**
+   * Órdenes de pago del socio: los pendientes y las últimas aprobadas.
+   *
+   * Los datos viven en el MariaDB del sistema PHP de gestión, no en el SQL
+   * Server, así que se piden por HTTP igual que la actualización de CBU.
+   * El id y el DNI salen del token, nunca del cliente.
+   */
+  async getOrdenesPago(personasId: number, dni: string): Promise<OrdenPago[]> {
+    const url = `${GESTION_API_BASE}/api-ops.php`;
+
+    let crudas: OrdenPagoPhp[];
+
+    try {
+      const respuesta = await firstValueFrom(
+        this.httpService.post<OrdenPagoPhp[] | { ok: number; message: string }>(
+          url,
+          { userId: personasId, dni },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-KEY': buildGestionApiKey(),
+            },
+            timeout: 15000,
+          },
+        ),
+      );
+
+      // api-ops.php contesta 200 aunque haya fallado, y en ese caso devuelve
+      // un objeto con {ok: 0} o directamente el texto del error de MySQL.
+      if (!Array.isArray(respuesta.data)) {
+        throw new Error(
+          `Respuesta inesperada: ${JSON.stringify(respuesta.data).slice(0, 200)}`,
+        );
+      }
+
+      crudas = respuesta.data;
+    } catch (error) {
+      this.logger.error(
+        `No se pudieron obtener las órdenes de pago del socio ${personasId}`,
+        error as Error,
+      );
+      throw new InternalServerErrorException(
+        'No pudimos obtener sus reintegros en este momento. Intente nuevamente en unos minutos.',
+      );
+    }
+
+    return crudas.map((cruda) => this.normalizarOrdenPago(cruda));
+  }
+
+  private normalizarOrdenPago(cruda: OrdenPagoPhp): OrdenPago {
+    const estado = this.normalizarEstado(cruda.estado);
+
+    return {
+      comprobante: cruda.comp ?? '',
+      fecha: cruda.fecha ?? '',
+      fechaIso: this.aIso(cruda.fecha),
+      estado,
+      estadoDescripcion:
+        estado === 'pendiente'
+          ? 'Pendiente'
+          : estado === 'aprobado'
+            ? 'Aprobado'
+            : (cruda.estado ?? ''),
+      importe: Number(cruda.imp) || 0,
+      // El PHP manda "-" cuando todavía no se transfirió.
+      fechaTransferencia:
+        cruda.fechatranf && cruda.fechatranf !== '-' ? cruda.fechatranf : null,
+      detalle: cruda.detalle ?? '',
+    };
+  }
+
+  private normalizarEstado(estado: string): EstadoOrdenPago {
+    const normalizado = (estado ?? '').trim().toLowerCase();
+
+    if (normalizado === 'pendiente' || normalizado === 'pdte') return 'pendiente';
+    if (normalizado === 'aprobado' || normalizado === 'apro') return 'aprobado';
+
+    return 'otro';
+  }
+
+  /** dd/mm/yyyy -> AAAA-MM-DD. Null si no matchea, para no inventar fechas. */
+  private aIso(fecha: string): string | null {
+    const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec((fecha ?? '').trim());
+    if (!match) return null;
+
+    const [, dd, mm, yyyy] = match;
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   /**

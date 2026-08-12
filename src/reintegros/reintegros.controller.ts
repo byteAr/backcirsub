@@ -28,6 +28,18 @@ import { ReintegrosService } from './reintegros.service';
 export class ReintegrosController {
   constructor(private readonly reintegrosService: ReintegrosService) {}
 
+  /**
+   * Órdenes de pago del socio autenticado.
+   *
+   * No recibe parámetros a propósito: el id y el DNI salen del token, así que
+   * nadie puede pedir los reintegros de otro socio.
+   */
+  @Get('ordenes-pago')
+  @UseGuards(AuthGuard())
+  async getOrdenesPago(@GetUser() user: { id: number; dni: string }) {
+    return this.reintegrosService.getOrdenesPago(user.id, user.dni);
+  }
+
   /** Tipos disponibles para que el front arme el selector. */
   @Get('tipos-documento')
   getTiposDocumento() {
