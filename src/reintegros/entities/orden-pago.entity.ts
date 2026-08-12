@@ -10,23 +10,32 @@ export interface OrdenPagoPhp {
 
 export type EstadoOrdenPago = 'pendiente' | 'aprobado' | 'otro';
 
+/** Lo que se muestra cuando un dato no vino. */
+export const SIN_DATO = '-';
+
 /**
  * Lo que consume el front. Normaliza tres cosas que el PHP devuelve
  * incómodas: el estado mezcla un literal en castellano ("Pendiente") con el
  * código crudo de la base ("apro"), el importe viene como string, y las
  * fechas en dd/mm/yyyy no se pueden ordenar como texto.
+ *
+ * Los campos de texto nunca vienen vacíos: si falta el dato llega un guión,
+ * así el front los pinta directo sin condicionales.
  */
 export interface OrdenPago {
   comprobante: string;
   /** dd/mm/yyyy, lista para mostrar. */
   fecha: string;
-  /** AAAA-MM-DD, para ordenar y comparar. */
+  /**
+   * AAAA-MM-DD, sólo para ordenar y comparar; no se muestra. Es el único
+   * campo que puede ser null, cuando la fecha no se pudo parsear.
+   */
   fechaIso: string | null;
   estado: EstadoOrdenPago;
   /** Etiqueta lista para mostrar: "Pendiente" / "Aprobado". */
   estadoDescripcion: string;
   importe: number;
-  /** dd/mm/yyyy, o null si todavía no se transfirió (el PHP manda "-"). */
-  fechaTransferencia: string | null;
+  /** dd/mm/yyyy, o "-" si todavía no se pagó. */
+  fechaPago: string;
   detalle: string;
 }

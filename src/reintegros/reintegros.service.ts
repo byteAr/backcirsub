@@ -27,6 +27,7 @@ import {
   EstadoOrdenPago,
   OrdenPago,
   OrdenPagoPhp,
+  SIN_DATO,
 } from './entities/orden-pago.entity';
 
 export interface ArchivoReintegroGuardado {
@@ -198,8 +199,8 @@ export class ReintegrosService {
     const estado = this.normalizarEstado(cruda.estado);
 
     return {
-      comprobante: cruda.comp ?? '',
-      fecha: cruda.fecha ?? '',
+      comprobante: this.oGuion(cruda.comp),
+      fecha: this.oGuion(cruda.fecha),
       fechaIso: this.aIso(cruda.fecha),
       estado,
       estadoDescripcion:
@@ -207,13 +208,18 @@ export class ReintegrosService {
           ? 'Pendiente'
           : estado === 'aprobado'
             ? 'Aprobado'
-            : (cruda.estado ?? ''),
+            : this.oGuion(cruda.estado),
       importe: Number(cruda.imp) || 0,
-      // El PHP manda "-" cuando todavía no se transfirió.
-      fechaTransferencia:
-        cruda.fechatranf && cruda.fechatranf !== '-' ? cruda.fechatranf : null,
-      detalle: cruda.detalle ?? '',
+      // El PHP ya manda "-" cuando todavía no se pagó; se deja igual.
+      fechaPago: this.oGuion(cruda.fechatranf),
+      detalle: this.oGuion(cruda.detalle),
     };
+  }
+
+  /** Guión para lo que falte, así el front pinta sin condicionales. */
+  private oGuion(valor: string | null | undefined): string {
+    const texto = (valor ?? '').trim();
+    return texto === '' ? SIN_DATO : texto;
   }
 
   private normalizarEstado(estado: string): EstadoOrdenPago {
