@@ -162,7 +162,36 @@ export class ReintegrosService {
       );
     }
 
-    return crudas.map((cruda) => this.normalizarOrdenPago(cruda));
+    return this.ordenar(crudas.map((cruda) => this.normalizarOrdenPago(cruda)));
+  }
+
+  /**
+   * El orden que devuelve el PHP no sirve: los ORDER BY van dentro de cada
+   * rama de un UNION y MySQL los descarta, así que llegan mezclados (se vio
+   * un comprobante de 2025 delante de otros de 2026).
+   *
+   * Se ordena acá: primero lo pendiente, que es lo que el socio quiere ver,
+   * y dentro de cada grupo lo más reciente arriba.
+   */
+  private ordenar(ordenes: OrdenPago[]): OrdenPago[] {
+    const prioridad = (estado: EstadoOrdenPago) =>
+      estado === 'pendiente' ? 0 : 1;
+
+    return [...ordenes].sort((a, b) => {
+      const porEstado = prioridad(a.estado) - prioridad(b.estado);
+      if (porEstado !== 0) return porEstado;
+
+      // Las que no tienen fecha parseable van al final del grupo.
+      if (a.fechaIso !== b.fechaIso) {
+        if (!a.fechaIso) return 1;
+        if (!b.fechaIso) return -1;
+        return b.fechaIso.localeCompare(a.fechaIso);
+      }
+
+      return b.comprobante.localeCompare(a.comprobante, undefined, {
+        numeric: true,
+      });
+    });
   }
 
   private normalizarOrdenPago(cruda: OrdenPagoPhp): OrdenPago {
