@@ -11,6 +11,7 @@ import { CredencialModule } from './credencial/credencial.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { AdminNotificationsModule } from './admin-notifications/admin-notifications.module';
 import { ReintegrosModule } from './reintegros/reintegros.module';
+import { DescuentosModule } from './descuentos/descuentos.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ReintegrosModule } from './reintegros/reintegros.module';
     PushNotificationsModule,
     AdminNotificationsModule,
     ReintegrosModule,
+    DescuentosModule,
   ],
   controllers: [AppController],
   providers: [AppService],
