@@ -127,6 +127,7 @@ export class ReintegrosService {
   async getOrdenesPago(personasId: number, dni: string): Promise<OrdenPago[]> {
     const url = `${GESTION_API_BASE}/api-ops.php`;
 
+
     let crudas: OrdenPagoPhp[];
 
     try {
@@ -226,7 +227,17 @@ export class ReintegrosService {
     const normalizado = (estado ?? '').trim().toLowerCase();
 
     if (normalizado === 'pendiente' || normalizado === 'pdte') return 'pendiente';
-    if (normalizado === 'aprobado' || normalizado === 'apro') return 'aprobado';
+
+    // "oprobado" es un error de tipeo del literal que escribe api-ops.php.
+    // Se acepta para no mostrar 29 de 32 movimientos como pendientes. Sacarlo
+    // cuando lo corrijan del lado del PHP.
+    if (
+      normalizado === 'aprobado' ||
+      normalizado === 'apro' ||
+      normalizado === 'oprobado'
+    ) {
+      return 'aprobado';
+    }
 
     return 'otro';
   }
