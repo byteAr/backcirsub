@@ -18,13 +18,19 @@ const MESES = [
 ];
 
 /**
- * Conceptos que se descuentan en cuotas y por lo tanto se numeran ("Cuota 3
- * de 6"). El resto —cuota social, farmacia, sepelio— son mensuales y fijos:
- * numerarlos daría un "Cuota 1 de 2" sin sentido.
- *
- * Se agregan códigos acá a medida que aparezcan otros planes en cuotas.
+ * api-cta.php mete la cuota dentro del texto del concepto:
+ *   "AY. ECONOMICAS (Pasivos) Cuota: 2/4"
+ * Se separa para poder mostrarla aparte y dejar el concepto limpio.
  */
-const CODIGOS_EN_CUOTAS = new Set(['3']);
+const CUOTA_EN_CONCEPTO = /^(.*?)\s*cuota:\s*(\d+)\s*\/\s*(\d+)\s*$/i;
+
+/**
+ * A los conceptos que no van en cuotas les queda un número suelto al final
+ * ("CUOTA SOCIAL 1", "SERVICIO SEPELIO CUOTA 1"), que es el mismo dato
+ * renderizado sin el prefijo. Se saca para no mostrarlo como parte del
+ * nombre.
+ */
+const NUMERO_SUELTO_AL_FINAL = /^(.*?)\s+\d+\s*$/;
 
 @Injectable()
 export class DescuentosService {
@@ -79,46 +85,10 @@ export class DescuentosService {
 
     const descuentos = this.ordenar(crudos.map(crudo => this.normalizar(crudo)));
 
-    // La numeración se calcula ANTES de filtrar: son justamente las cuotas
-    // futuras las que dicen de cuántas es el plan. Si se filtrara primero,
-    // una ayuda de 6 cuotas con 4 ya descontadas se mostraría como "de 4".
-    this.numerarCuotas(descuentos);
 
     return this.agruparPorPeriodo(this.hastaElMesEnCurso(descuentos));
   }
 
-  /**
-   * Numera las cuotas de cada plan. Como el PHP no manda ningún
-   * identificador de la ayuda económica, se agrupan por concepto e importe:
-   * dos cuotas del mismo monto se asumen del mismo plan. Es lo mejor que se
-   * puede hacer con los datos que llegan, y falla si el socio tiene dos
-   * ayudas distintas con la misma cuota.
-   */
-  private numerarCuotas(descuentos: Descuento[]): void {
-    const planes = new Map<string, Descuento[]>();
-
-    for (const descuento of descuentos) {
-      if (!CODIGOS_EN_CUOTAS.has(descuento.codigo)) continue;
-
-      const clave = `${descuento.concepto}|${descuento.importe}`;
-      const plan = planes.get(clave) ?? [];
-      plan.push(descuento);
-      planes.set(clave, plan);
-    }
-
-    for (const plan of planes.values()) {
-      // De más viejo a más nuevo: la primera cuota es la primera que se pagó.
-      const enOrden = [...plan].sort((a, b) =>
-        (a.periodoIso ?? '').localeCompare(b.periodoIso ?? ''),
-      );
-
-      enOrden.forEach((descuento, indice) => {
-        descuento.cuota = indice + 1;
-        descuento.totalCuotas = enOrden.length;
-        descuento.etiquetaCuota = `Cuota ${indice + 1} de ${enOrden.length}`;
-      });
-    }
-  }
 
   /**
    * Descarta los períodos posteriores al mes en curso: son descuentos que
@@ -205,13 +175,50 @@ export class DescuentosService {
   }
 
   private normalizar(crudo: DescuentoPhp): Descuento {
+    const { concepto, cuota, totalCuotas } = this.separarCuota(crudo.concepto);
+
     return {
       codigo: (crudo.Mov_conceptos ?? '').trim(),
-      concepto: (crudo.concepto ?? '').trim() || '-',
+      concepto,
       periodo: (crudo.Mesanio ?? '').trim() || '-',
       periodoIso: this.aIso(crudo.Mesanio),
       importe: Number(crudo.importe) || 0,
+      ...(cuota !== undefined && {
+        cuota,
+        totalCuotas,
+        etiquetaCuota: `Cuota ${cuota} de ${totalCuotas}`,
+      }),
     };
+  }
+
+  /**
+   * Saca la cuota del texto del concepto. El número de cuota lo manda el PHP,
+   * que es quien conoce el plan: no se deduce de los datos.
+   */
+  private separarCuota(crudo: string | null | undefined): {
+    concepto: string;
+    cuota?: number;
+    totalCuotas?: number;
+  } {
+    const texto = (crudo ?? '').trim();
+    if (!texto) return { concepto: '-' };
+
+    const conCuota = CUOTA_EN_CONCEPTO.exec(texto);
+    if (conCuota) {
+      const [, nombre, cuota, total] = conCuota;
+      return {
+        concepto: nombre.trim() || '-',
+        cuota: Number(cuota),
+        totalCuotas: Number(total),
+      };
+    }
+
+    // Sin "Cuota:" pero con un número suelto al final: es un concepto mensual
+    // fijo, así que se limpia el número y no se numera nada.
+    const conNumero = NUMERO_SUELTO_AL_FINAL.exec(texto);
+    if (conNumero) return { concepto: conNumero[1].trim() || '-' };
+
+    return { concepto: texto };
   }
 
   /** "MM - YYYY" -> "YYYY-MM". Null si no matchea, para no inventar fechas. */
