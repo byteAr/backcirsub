@@ -33,12 +33,12 @@ const CUOTA_EN_CONCEPTO = /^(.*?)\s*cuota:\s*(\d+)\s*\/\s*(\d+)\s*$/i;
 const NUMERO_SUELTO_AL_FINAL = /^(.*?)\s+\d+\s*$/;
 
 /**
- * Nombres para mostrar. Lo que manda el PHP viene en mayúsculas y con
- * abreviaturas internas ("AY. ECONOMICAS (Pasivos)"), que al socio no le
- * dicen nada. Se agregan entradas acá a medida que aparezcan más conceptos.
+ * Nombres para mostrar. Lo que manda el PHP trae abreviaturas internas
+ * ("AY. ECONOMICAS (Pasivos)") que al socio no le dicen nada. Se agregan
+ * entradas acá a medida que aparezcan más conceptos.
  */
 const NOMBRES_PARA_MOSTRAR: Record<string, string> = {
-  'AY. ECONOMICAS (PASIVOS)': 'Ayuda Económica',
+  'AY. ECONOMICAS (PASIVOS)': 'AYUDA ECONÓMICA',
 };
 
 @Injectable()
@@ -55,6 +55,7 @@ export class DescuentosService {
    */
   async getDescuentos(personasId: number, dni: string): Promise<PeriodoDescuentos[]> {
     const url = `${GESTION_API_BASE}/api-cta.php`;
+
 
     let crudos: DescuentoPhp[];
 
@@ -230,12 +231,18 @@ export class DescuentosService {
     return { concepto: this.nombreParaMostrar(texto) };
   }
 
-  /** Traduce el nombre del PHP al que ve el socio, si hay uno definido. */
+  /**
+   * Traduce el nombre del PHP al que ve el socio, si hay uno definido.
+   *
+   * Siempre devuelve mayúsculas: así los conceptos se leen parejos aunque el
+   * PHP mande alguno con otra capitalización, como "AY. ECONOMICAS
+   * (Pasivos)", que traía la última palabra en minúscula.
+   */
   private nombreParaMostrar(crudo: string): string {
     const limpio = crudo.trim();
     if (!limpio) return '-';
 
-    return NOMBRES_PARA_MOSTRAR[limpio.toUpperCase()] ?? limpio;
+    return (NOMBRES_PARA_MOSTRAR[limpio.toUpperCase()] ?? limpio).toUpperCase();
   }
 
   /** "MM - YYYY" -> "YYYY-MM". Null si no matchea, para no inventar fechas. */
