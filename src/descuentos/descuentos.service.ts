@@ -6,7 +6,16 @@ import {
   buildGestionApiKey,
   GESTION_API_BASE,
 } from '../common/gestion-api-key';
-import { Descuento, DescuentoPhp } from './entities/descuento.entity';
+import {
+  Descuento,
+  DescuentoPhp,
+  PeriodoDescuentos,
+} from './entities/descuento.entity';
+
+const MESES = [
+  'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
+  'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE',
+];
 
 @Injectable()
 export class DescuentosService {
@@ -20,7 +29,7 @@ export class DescuentosService {
    * sistema PHP de gestión, así que se piden por HTTP igual que las órdenes
    * de pago. El id y el DNI salen del token, nunca del cliente.
    */
-  async getDescuentos(personasId: number, dni: string): Promise<Descuento[]> {
+  async getDescuentos(personasId: number, dni: string): Promise<PeriodoDescuentos[]> {
     const url = `${GESTION_API_BASE}/api-cta.php`;
 
     let crudos: DescuentoPhp[];
@@ -59,7 +68,60 @@ export class DescuentosService {
       );
     }
 
-    return this.ordenar(crudos.map(crudo => this.normalizar(crudo)));
+    return this.agruparPorPeriodo(
+      this.ordenar(crudos.map(crudo => this.normalizar(crudo))),
+    );
+  }
+
+  /**
+   * Arma una entrada por mes con sus conceptos adentro, que es como se
+   * muestra: una fila desplegable por período.
+   */
+  private agruparPorPeriodo(descuentos: Descuento[]): PeriodoDescuentos[] {
+    const porPeriodo = new Map<string, PeriodoDescuentos>();
+
+    for (const descuento of descuentos) {
+      // Se agrupa por el período crudo y no por el ISO: si alguno no se pudo
+      // interpretar, igual tiene que caer junto a los de su mismo texto en vez
+      // de mezclarse todos bajo una clave nula.
+      const clave = descuento.periodo;
+
+      let periodo = porPeriodo.get(clave);
+      if (!periodo) {
+        periodo = {
+          periodo: descuento.periodo,
+          periodoIso: descuento.periodoIso,
+          etiqueta: this.etiquetaDe(descuento.periodoIso, descuento.periodo),
+          total: 0,
+          conceptos: [],
+        };
+        porPeriodo.set(clave, periodo);
+      }
+
+      periodo.conceptos.push({
+        codigo: descuento.codigo,
+        concepto: descuento.concepto,
+        importe: descuento.importe,
+      });
+      periodo.total += descuento.importe;
+    }
+
+    // Sumar decimales en punto flotante arrastra basura (82802.54000000001).
+    for (const periodo of porPeriodo.values()) {
+      periodo.total = Math.round(periodo.total * 100) / 100;
+    }
+
+    return [...porPeriodo.values()];
+  }
+
+  /** "2026-09" -> "SEPTIEMBRE 2026". Si no se pudo interpretar, deja el crudo. */
+  private etiquetaDe(periodoIso: string | null, crudo: string): string {
+    if (!periodoIso) return crudo;
+
+    const [anio, mes] = periodoIso.split('-');
+    const nombre = MESES[Number(mes) - 1];
+
+    return nombre ? `${nombre} ${anio}` : crudo;
   }
 
   private normalizar(crudo: DescuentoPhp): Descuento {
