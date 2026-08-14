@@ -17,6 +17,15 @@ const MESES = [
   'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE',
 ];
 
+/**
+ * Conceptos que se descuentan en cuotas y por lo tanto se numeran ("Cuota 3
+ * de 6"). El resto —cuota social, farmacia, sepelio— son mensuales y fijos:
+ * numerarlos daría un "Cuota 1 de 2" sin sentido.
+ *
+ * Se agregan códigos acá a medida que aparezcan otros planes en cuotas.
+ */
+const CODIGOS_EN_CUOTAS = new Set(['3']);
+
 @Injectable()
 export class DescuentosService {
 
@@ -68,9 +77,75 @@ export class DescuentosService {
       );
     }
 
-    return this.agruparPorPeriodo(
-      this.ordenar(crudos.map(crudo => this.normalizar(crudo))),
+    const descuentos = this.ordenar(crudos.map(crudo => this.normalizar(crudo)));
+
+    // La numeración se calcula ANTES de filtrar: son justamente las cuotas
+    // futuras las que dicen de cuántas es el plan. Si se filtrara primero,
+    // una ayuda de 6 cuotas con 4 ya descontadas se mostraría como "de 4".
+    this.numerarCuotas(descuentos);
+
+    return this.agruparPorPeriodo(this.hastaElMesEnCurso(descuentos));
+  }
+
+  /**
+   * Numera las cuotas de cada plan. Como el PHP no manda ningún
+   * identificador de la ayuda económica, se agrupan por concepto e importe:
+   * dos cuotas del mismo monto se asumen del mismo plan. Es lo mejor que se
+   * puede hacer con los datos que llegan, y falla si el socio tiene dos
+   * ayudas distintas con la misma cuota.
+   */
+  private numerarCuotas(descuentos: Descuento[]): void {
+    const planes = new Map<string, Descuento[]>();
+
+    for (const descuento of descuentos) {
+      if (!CODIGOS_EN_CUOTAS.has(descuento.codigo)) continue;
+
+      const clave = `${descuento.concepto}|${descuento.importe}`;
+      const plan = planes.get(clave) ?? [];
+      plan.push(descuento);
+      planes.set(clave, plan);
+    }
+
+    for (const plan of planes.values()) {
+      // De más viejo a más nuevo: la primera cuota es la primera que se pagó.
+      const enOrden = [...plan].sort((a, b) =>
+        (a.periodoIso ?? '').localeCompare(b.periodoIso ?? ''),
+      );
+
+      enOrden.forEach((descuento, indice) => {
+        descuento.cuota = indice + 1;
+        descuento.totalCuotas = enOrden.length;
+        descuento.etiquetaCuota = `Cuota ${indice + 1} de ${enOrden.length}`;
+      });
+    }
+  }
+
+  /**
+   * Descarta los períodos posteriores al mes en curso: son descuentos que
+   * todavía no se hicieron y al socio le confunden ver como si ya estuvieran.
+   */
+  private hastaElMesEnCurso(descuentos: Descuento[]): Descuento[] {
+    const mesActual = this.mesActualIso();
+
+    return descuentos.filter(
+      descuento => !descuento.periodoIso || descuento.periodoIso <= mesActual,
     );
+  }
+
+  /** "AAAA-MM" del mes en curso en horario argentino. */
+  private mesActualIso(): string {
+    const partes = new Intl.DateTimeFormat('es-AR', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+    }).formatToParts(new Date());
+
+    const anio = partes.find(p => p.type === 'year')!.value;
+    const mes = partes.find(p => p.type === 'month')!.value;
+
+    // El padStart no es decorativo: la comparación es de texto, y sin el cero
+    // "2026-12" <= "2026-8" da verdadero y los meses futuros se colaban.
+    return `${anio}-${mes.padStart(2, '0')}`;
   }
 
   /**
@@ -102,6 +177,11 @@ export class DescuentosService {
         codigo: descuento.codigo,
         concepto: descuento.concepto,
         importe: descuento.importe,
+        ...(descuento.cuota !== undefined && {
+          cuota: descuento.cuota,
+          totalCuotas: descuento.totalCuotas,
+          etiquetaCuota: descuento.etiquetaCuota,
+        }),
       });
       periodo.total += descuento.importe;
     }

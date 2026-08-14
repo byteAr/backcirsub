@@ -20,6 +20,9 @@ export interface Descuento {
   /** "2026-09", para ordenar y agrupar. Null si no se pudo interpretar. */
   periodoIso: string | null;
   importe: number;
+  cuota?: number;
+  totalCuotas?: number;
+  etiquetaCuota?: string;
 }
 
 /**
@@ -42,4 +45,10 @@ export interface ConceptoDescuento {
   codigo: string;
   concepto: string;
   importe: number;
+  /** Número de cuota dentro del plan. Ausente si el concepto no va en cuotas. */
+  cuota?: number;
+  /** Cantidad total de cuotas del plan. */
+  totalCuotas?: number;
+  /** "Cuota 1 de 6", listo para mostrar. Ausente si no aplica. */
+  etiquetaCuota?: string;
 }
