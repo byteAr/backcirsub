@@ -32,6 +32,15 @@ const CUOTA_EN_CONCEPTO = /^(.*?)\s*cuota:\s*(\d+)\s*\/\s*(\d+)\s*$/i;
  */
 const NUMERO_SUELTO_AL_FINAL = /^(.*?)\s+\d+\s*$/;
 
+/**
+ * Nombres para mostrar. Lo que manda el PHP viene en mayúsculas y con
+ * abreviaturas internas ("AY. ECONOMICAS (Pasivos)"), que al socio no le
+ * dicen nada. Se agregan entradas acá a medida que aparezcan más conceptos.
+ */
+const NOMBRES_PARA_MOSTRAR: Record<string, string> = {
+  'AY. ECONOMICAS (PASIVOS)': 'Ayuda Económica',
+};
+
 @Injectable()
 export class DescuentosService {
 
@@ -186,7 +195,7 @@ export class DescuentosService {
       ...(cuota !== undefined && {
         cuota,
         totalCuotas,
-        etiquetaCuota: `Cuota ${cuota} de ${totalCuotas}`,
+        etiquetaCuota: `cuota ${cuota}/${totalCuotas}`,
       }),
     };
   }
@@ -207,7 +216,7 @@ export class DescuentosService {
     if (conCuota) {
       const [, nombre, cuota, total] = conCuota;
       return {
-        concepto: nombre.trim() || '-',
+        concepto: this.nombreParaMostrar(nombre),
         cuota: Number(cuota),
         totalCuotas: Number(total),
       };
@@ -216,9 +225,17 @@ export class DescuentosService {
     // Sin "Cuota:" pero con un número suelto al final: es un concepto mensual
     // fijo, así que se limpia el número y no se numera nada.
     const conNumero = NUMERO_SUELTO_AL_FINAL.exec(texto);
-    if (conNumero) return { concepto: conNumero[1].trim() || '-' };
+    if (conNumero) return { concepto: this.nombreParaMostrar(conNumero[1]) };
 
-    return { concepto: texto };
+    return { concepto: this.nombreParaMostrar(texto) };
+  }
+
+  /** Traduce el nombre del PHP al que ve el socio, si hay uno definido. */
+  private nombreParaMostrar(crudo: string): string {
+    const limpio = crudo.trim();
+    if (!limpio) return '-';
+
+    return NOMBRES_PARA_MOSTRAR[limpio.toUpperCase()] ?? limpio;
   }
 
   /** "MM - YYYY" -> "YYYY-MM". Null si no matchea, para no inventar fechas. */
