@@ -38,7 +38,9 @@ const NUMERO_SUELTO_AL_FINAL = /^(.*?)\s+\d+\s*$/;
  * entradas acá a medida que aparezcan más conceptos.
  */
 const NOMBRES_PARA_MOSTRAR: Record<string, string> = {
-  'AY. ECONOMICAS (PASIVOS)': 'AYUDA ECONÓMICA',
+  // Corto a propósito: al lado va la etiqueta de la cuota, y con el nombre
+  // completo no entraban los dos en una línea de celular.
+  'AY. ECONOMICAS (PASIVOS)': 'AY. ECONÓMICA',
 };
 
 @Injectable()
