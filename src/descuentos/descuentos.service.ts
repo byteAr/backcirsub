@@ -58,7 +58,6 @@ export class DescuentosService {
   async getDescuentos(personasId: number, dni: string): Promise<PeriodoDescuentos[]> {
     const url = `${GESTION_API_BASE}/api-cta.php`;
 
-
     let crudos: DescuentoPhp[];
 
     try {
@@ -97,10 +96,8 @@ export class DescuentosService {
 
     const descuentos = this.ordenar(crudos.map(crudo => this.normalizar(crudo)));
 
-
     return this.agruparPorPeriodo(this.hastaElMesEnCurso(descuentos));
   }
-
 
   /**
    * Descarta los períodos posteriores al mes en curso: son descuentos que
