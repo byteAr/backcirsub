@@ -214,7 +214,8 @@ export class ReintegrosService {
       estado,
       estadoDescripcion: this.describirEstado(estado, cruda.estado),
       importe: Number(cruda.imp) || 0,
-      // El PHP ya manda "-" cuando todavía no se pagó; se deja igual.
+      // Cuando todavía no se transfirió, el PHP manda un relleno de guiones
+      // ("-" o "---"); oGuion() lo normaliza a uno solo.
       fechaPago: this.oGuion(cruda.fechatranf),
       detalle: this.oGuion(cruda.detalle),
     };
@@ -242,10 +243,16 @@ export class ReintegrosService {
     }
   }
 
-  /** Guión para lo que falte, así el front pinta sin condicionales. */
+  /**
+   * Guión para lo que falte, así el front pinta sin condicionales.
+   *
+   * api-ops.php marca "sin dato" de tres formas según el campo y el momento:
+   * string vacío, "-" y "---". Se unifican todas en un solo guión para que la
+   * columna no quede despareja.
+   */
   private oGuion(valor: string | null | undefined): string {
     const texto = (valor ?? '').trim();
-    return texto === '' ? SIN_DATO : texto;
+    return texto === '' || /^-+$/.test(texto) ? SIN_DATO : texto;
   }
 
   private normalizarEstado(estado: string): EstadoOrdenPago {

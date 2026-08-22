@@ -108,4 +108,17 @@ describe('ReintegrosService - órdenes de pago', () => {
 
     expect(resultado.map((o) => o.comprobante)).toEqual(['nuevo', 'viejo']);
   });
+
+  it('normaliza los rellenos de guiones que manda el PHP', async () => {
+    const service = construir([
+      { comp: '1', fecha: '21/08/2026', estado: 'Pendiente', imp: '100.00', fechatranf: '---', detalle: '' },
+      { comp: '2', fecha: '20/08/2026', estado: 'Pendiente', imp: '100.00', fechatranf: '-', detalle: '   ' },
+    ]);
+
+    const resultado = await service.getOrdenesPago(1, '21677083');
+
+    // "---", "-" y el vacío significan lo mismo y tienen que verse igual.
+    expect(resultado.map((o) => o.fechaPago)).toEqual(['-', '-']);
+    expect(resultado.map((o) => o.detalle)).toEqual(['-', '-']);
+  });
 });
