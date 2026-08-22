@@ -155,6 +155,7 @@ export class DescuentosService {
       periodo.conceptos.push({
         codigo: descuento.codigo,
         concepto: descuento.concepto,
+        detalle: descuento.detalle,
         importe: descuento.importe,
         ...(descuento.cuota !== undefined && {
           cuota: descuento.cuota,
@@ -184,11 +185,14 @@ export class DescuentosService {
   }
 
   private normalizar(crudo: DescuentoPhp): Descuento {
-    const { concepto, cuota, totalCuotas } = this.separarCuota(crudo.concepto);
+    const { detalle, cuota, totalCuotas } = this.separarCuota(crudo.concepto);
 
     return {
       codigo: (crudo.Mov_conceptos ?? '').trim(),
-      concepto,
+      // "con" es el campo más nuevo del PHP y ya lo vimos ir y venir varias
+      // veces; si no llega, la columna muestra un guión en vez de vaciarse.
+      concepto: (crudo.con ?? '').trim() || '-',
+      detalle,
       periodo: (crudo.Mesanio ?? '').trim() || '-',
       periodoIso: this.aIso(crudo.Mesanio),
       importe: Number(crudo.importe) || 0,
@@ -201,22 +205,23 @@ export class DescuentosService {
   }
 
   /**
-   * Saca la cuota del texto del concepto. El número de cuota lo manda el PHP,
-   * que es quien conoce el plan: no se deduce de los datos.
+   * Saca la cuota del texto descriptivo, que es lo que la tabla muestra en la
+   * columna DETALLE. El número de cuota lo manda el PHP, que es quien conoce
+   * el plan: no se deduce de los datos.
    */
   private separarCuota(crudo: string | null | undefined): {
-    concepto: string;
+    detalle: string;
     cuota?: number;
     totalCuotas?: number;
   } {
     const texto = (crudo ?? '').trim();
-    if (!texto) return { concepto: '-' };
+    if (!texto) return { detalle: '-' };
 
     const conCuota = CUOTA_EN_CONCEPTO.exec(texto);
     if (conCuota) {
       const [, nombre, cuota, total] = conCuota;
       return {
-        concepto: this.nombreParaMostrar(nombre),
+        detalle: this.nombreParaMostrar(nombre),
         cuota: Number(cuota),
         totalCuotas: Number(total),
       };
@@ -225,9 +230,9 @@ export class DescuentosService {
     // Sin "Cuota:" pero con un número suelto al final: es un concepto mensual
     // fijo, así que se limpia el número y no se numera nada.
     const conNumero = NUMERO_SUELTO_AL_FINAL.exec(texto);
-    if (conNumero) return { concepto: this.nombreParaMostrar(conNumero[1]) };
+    if (conNumero) return { detalle: this.nombreParaMostrar(conNumero[1]) };
 
-    return { concepto: this.nombreParaMostrar(texto) };
+    return { detalle: this.nombreParaMostrar(texto) };
   }
 
   /**

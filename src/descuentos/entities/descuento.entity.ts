@@ -1,7 +1,18 @@
-/** Tal cual lo devuelve api-cta.php, sin tocar. */
+/**
+ * Tal cual lo devuelve api-cta.php, sin tocar.
+ *
+ * Ojo con los nombres, que no dicen lo que parecen: el texto descriptivo
+ * viene en "concepto" pero la pantalla lo muestra como DETALLE, y lo que la
+ * pantalla llama CONCEPTO es "con". "Mov_conceptos" no se muestra: solo fija
+ * el orden de las filas dentro del mes.
+ */
 export interface DescuentoPhp {
+  /** Id del movimiento contable. Se repite entre conceptos del mismo asiento. */
+  con?: string;
+  /** Código del concepto: 01, 02, 59, 259. Ordena las filas del mes. */
   Mov_conceptos: string;
   Mesanio: string;
+  /** Texto descriptivo, con la cuota embebida cuando corresponde. */
   concepto: string;
   importe: string;
 }
@@ -12,9 +23,12 @@ export interface DescuentoPhp {
  * ordenar como texto.
  */
 export interface Descuento {
-  /** Código interno del concepto: 01, 02, 59, 259... */
+  /** Mov_conceptos: 01, 02, 59, 259. Ordena, no se muestra. */
   codigo: string;
+  /** Lo que la tabla muestra en la columna CONCEPTO (el campo "con" del PHP). */
   concepto: string;
+  /** Lo que la tabla muestra en la columna DETALLE, ya sin la cuota. */
+  detalle: string;
   /** "09 - 2026", listo para mostrar. */
   periodo: string;
   /** "2026-09", para ordenar y agrupar. Null si no se pudo interpretar. */
@@ -42,8 +56,12 @@ export interface PeriodoDescuentos {
 }
 
 export interface ConceptoDescuento {
+  /** Ordena las filas del mes; no se muestra. */
   codigo: string;
+  /** Columna CONCEPTO. */
   concepto: string;
+  /** Columna DETALLE. */
+  detalle: string;
   importe: number;
   /** Número de cuota dentro del plan. Ausente si el concepto no va en cuotas. */
   cuota?: number;
