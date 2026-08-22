@@ -8,7 +8,13 @@ export interface OrdenPagoPhp {
   detalle: string;
 }
 
-export type EstadoOrdenPago = 'pendiente' | 'aprobado' | 'otro';
+/**
+ * El circuito del reintegro tiene tres pasos y api-ops.php los devuelve como
+ * literales: se solicita (pendiente), se autoriza (aprobado) y se transfiere
+ * la plata (pagado). "otro" es la red de contención por si aparece un cuarto
+ * literal: se muestra el texto crudo en vez de mentirle al socio.
+ */
+export type EstadoOrdenPago = 'pendiente' | 'aprobado' | 'pagado' | 'otro';
 
 /** Lo que se muestra cuando un dato no vino. */
 export const SIN_DATO = '-';
@@ -32,7 +38,7 @@ export interface OrdenPago {
    */
   fechaIso: string | null;
   estado: EstadoOrdenPago;
-  /** Etiqueta lista para mostrar: "Pendiente" / "Aprobado". */
+  /** Etiqueta lista para mostrar: "Pendiente" / "Aprobado" / "Pagado". */
   estadoDescripcion: string;
   importe: number;
   /** dd/mm/yyyy, o "-" si todavía no se pagó. */

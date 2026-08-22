@@ -172,12 +172,20 @@ export class ReintegrosService {
    * rama de un UNION y MySQL los descarta, así que llegan mezclados (se vio
    * un comprobante de 2025 delante de otros de 2026).
    *
-   * Se ordena acá: primero lo pendiente, que es lo que el socio quiere ver,
-   * y dentro de cada grupo lo más reciente arriba.
+   * Se ordena acá siguiendo el circuito del reintegro: arriba lo que todavía
+   * está en curso —primero lo pendiente, después lo aprobado que espera la
+   * transferencia—, y al final lo ya pagado, que el socio consulta menos.
+   * Dentro de cada grupo, lo más reciente arriba.
    */
   private ordenar(ordenes: OrdenPago[]): OrdenPago[] {
-    const prioridad = (estado: EstadoOrdenPago) =>
-      estado === 'pendiente' ? 0 : 1;
+    const ORDEN_ESTADOS: Record<EstadoOrdenPago, number> = {
+      pendiente: 0,
+      aprobado: 1,
+      pagado: 2,
+      otro: 3,
+    };
+
+    const prioridad = (estado: EstadoOrdenPago) => ORDEN_ESTADOS[estado];
 
     return [...ordenes].sort((a, b) => {
       const porEstado = prioridad(a.estado) - prioridad(b.estado);
@@ -204,17 +212,34 @@ export class ReintegrosService {
       fecha: this.oGuion(cruda.fecha),
       fechaIso: this.aIso(cruda.fecha),
       estado,
-      estadoDescripcion:
-        estado === 'pendiente'
-          ? 'Pendiente'
-          : estado === 'aprobado'
-            ? 'Aprobado'
-            : this.oGuion(cruda.estado),
+      estadoDescripcion: this.describirEstado(estado, cruda.estado),
       importe: Number(cruda.imp) || 0,
       // El PHP ya manda "-" cuando todavía no se pagó; se deja igual.
       fechaPago: this.oGuion(cruda.fechatranf),
       detalle: this.oGuion(cruda.detalle),
     };
+  }
+
+  /**
+   * Etiqueta lista para mostrar. Para los estados conocidos se usa un literal
+   * propio y no el del PHP, que llega con mayúsculas inconsistentes y a veces
+   * abreviado ("apro"). Para lo desconocido se muestra el texto crudo: es
+   * preferible a inventar un estado y mentirle al socio sobre su plata.
+   */
+  private describirEstado(
+    estado: EstadoOrdenPago,
+    crudo: string | null | undefined,
+  ): string {
+    switch (estado) {
+      case 'pendiente':
+        return 'Pendiente';
+      case 'aprobado':
+        return 'Aprobado';
+      case 'pagado':
+        return 'Pagado';
+      default:
+        return this.oGuion(crudo);
+    }
   }
 
   /** Guión para lo que falte, así el front pinta sin condicionales. */
@@ -228,9 +253,9 @@ export class ReintegrosService {
 
     if (normalizado === 'pendiente' || normalizado === 'pdte') return 'pendiente';
 
-    // "oprobado" es un error de tipeo del literal que escribe api-ops.php.
-    // Se acepta para no mostrar 29 de 32 movimientos como pendientes. Sacarlo
-    // cuando lo corrijan del lado del PHP.
+    // "oprobado" fue un error de tipeo del literal que escribía api-ops.php.
+    // Se sigue aceptando por las dudas: no cuesta nada y ya nos pasó que el
+    // PHP cambiara los literales sin aviso.
     if (
       normalizado === 'aprobado' ||
       normalizado === 'apro' ||
@@ -238,6 +263,8 @@ export class ReintegrosService {
     ) {
       return 'aprobado';
     }
+
+    if (normalizado === 'pagado' || normalizado === 'pago') return 'pagado';
 
     return 'otro';
   }
@@ -269,6 +296,13 @@ export class ReintegrosService {
       throw new BadRequestException('Tipo de documento no reconocido');
     }
 
+    // Los trámites que no cuelgan de una adhesión no exigen beneficio: se
+    // acepta la documentación de cualquier socio y el filtro queda del lado
+    // de quien la procesa.
+    if (!definicion.beneficio) return;
+
+    const beneficioRequerido = definicion.beneficio;
+
     let beneficios: Record<string, unknown>[];
 
     try {
@@ -288,12 +322,12 @@ export class ReintegrosService {
     }
 
     const habilitado = beneficios.some(
-      (beneficio) => beneficio?.[definicion.beneficio] === true,
+      (beneficio) => beneficio?.[beneficioRequerido] === true,
     );
 
     if (!habilitado) {
       this.logger.warn(
-        `Socio ${personasId} (DNI ${dni}) intentó cargar ${tipoDocumento} sin el beneficio "${definicion.beneficio}"`,
+        `Socio ${personasId} (DNI ${dni}) intentó cargar ${tipoDocumento} sin el beneficio "${beneficioRequerido}"`,
       );
       throw new ForbiddenException(
         `No cuenta con el beneficio necesario para solicitar este reintegro.`,
