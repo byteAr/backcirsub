@@ -122,3 +122,62 @@ describe('ReintegrosService - órdenes de pago', () => {
     expect(resultado.map((o) => o.detalle)).toEqual(['-', '-']);
   });
 });
+
+/**
+ * El proxy de api-list_tramite.php no normaliza nada —eso lo hace el front—,
+ * pero sí tiene que distinguir una respuesta buena de un error disfrazado de
+ * 200, que es la maña de siempre de estos PHP.
+ */
+describe('ReintegrosService - listas de gestión', () => {
+  const construir = (data: unknown) => {
+    const httpService = {
+      post: jest.fn().mockReturnValue(of({ data })),
+    };
+
+    const service = new ReintegrosService(
+      { get: () => undefined } as any,
+      {} as any,
+      httpService as any,
+    );
+
+    return { service, httpService };
+  };
+
+  it('devuelve la tupla tal cual, sin tocarla', async () => {
+    const payload = [
+      [{ tipo: 'val', codigo: '1', descr: 'Cuota Social Tipo1', valor: '24252.00' }],
+      [{ id: '1', clave: 'RM', descrp: 'REINTEGRO DE MEDICAMTO' }],
+    ];
+    const { service } = construir(payload);
+
+    await expect(service.getListasGestion()).resolves.toEqual(payload);
+  });
+
+  it('manda userId y dni en cero: el PHP los exige pero no filtra con ellos', async () => {
+    const { service, httpService } = construir([[], []]);
+
+    await service.getListasGestion();
+
+    expect(httpService.post).toHaveBeenCalledWith(
+      expect.stringContaining('api-list_tramite.php'),
+      { userId: 0, dni: '0' },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-API-KEY': expect.stringMatching(/^api-key-tk-\d{6}$/),
+        }),
+      }),
+    );
+  });
+
+  it('rechaza el {ok:0} que el PHP manda con status 200', async () => {
+    const { service } = construir({ ok: 0, message: 'Faltan parámetros' });
+
+    await expect(service.getListasGestion()).rejects.toThrow();
+  });
+
+  it('rechaza si falta alguna de las dos ramas del array', async () => {
+    const { service } = construir([[{ tipo: 'val', codigo: '1', descr: 'x', valor: '1' }]]);
+
+    await expect(service.getListasGestion()).rejects.toThrow();
+  });
+});

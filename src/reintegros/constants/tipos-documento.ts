@@ -26,11 +26,18 @@ export interface DefinicionTipoDocumento {
  * normalizada: cuando agreguen uno nuevo alcanza con sumarlo acá indicando,
  * si corresponde, qué beneficio exige. La validación de permisos sale de este
  * mapa, no hay que tocar el controller ni el service.
+ *
+ * El selector del front se llena con lo que devuelve api-list_tramite.php, no
+ * con este mapa, así que las dos listas tienen que darse la mano: un código
+ * que el PHP ofrezca y que falte acá se rechaza al subir con "Tipo de
+ * documento no reconocido". Hoy el PHP manda RM, RN, TE, TP y RC. RE no lo
+ * lista todavía; queda declarado para no perder la regla si lo agregan.
  */
 export const TIPOS_DOCUMENTO_REINTEGRO: Record<string, DefinicionTipoDocumento> = {
   RM: { descripcion: 'Reintegro de medicamentos', beneficio: 'far' },
   RN: { descripcion: 'Reintegro por nacimiento' },
   RE: { descripcion: 'Reintegro por escolaridad' },
+  RC: { descripcion: 'Reintegro por casamiento' },
   TE: { descripcion: 'Trámite de evacuación', beneficio: 'eva' },
   TP: { descripcion: 'Trámite de préstamo' },
 };

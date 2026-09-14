@@ -168,6 +168,64 @@ export class ReintegrosService {
   }
 
   /**
+   * Valores de la mutual y tipos de trámite, tal cual los devuelve
+   * api-list_tramite.php: una tupla [valores, tipos].
+   *
+   * A diferencia del resto, acá el backend no normaliza nada: es sólo un
+   * proxy para saltar el CORS. Ese PHP no manda cabeceras Access-Control y
+   * contesta 405 al preflight OPTIONS, así que el navegador bloquea la
+   * llamada directa —que es la que el front intenta primero— antes de que
+   * salga. Cuando gestión agregue los headers, esto deja de usarse solo y
+   * puede borrarse.
+   *
+   * El PHP exige userId y dni para contestar pero no filtra nada con ellos:
+   * devuelve la misma tabla para cualquier valor. Por eso van en cero y no se
+   * toma nada del token.
+   */
+  async getListasGestion(): Promise<unknown> {
+    const url = `${GESTION_API_BASE}/api-list_tramite.php`;
+
+    try {
+      const respuesta = await firstValueFrom(
+        this.httpService.post<unknown>(
+          url,
+          { userId: 0, dni: '0' },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-KEY': buildGestionApiKey(),
+            },
+            timeout: 15000,
+          },
+        ),
+      );
+
+      // Las dos ramas del array tienen que estar: el front reparte los valores
+      // por la primera y llena el selector de trámites con la segunda.
+      const datos = respuesta.data;
+      if (
+        !Array.isArray(datos) ||
+        !Array.isArray(datos[0]) ||
+        !Array.isArray(datos[1])
+      ) {
+        throw new Error(
+          `Respuesta inesperada: ${JSON.stringify(datos).slice(0, 200)}`,
+        );
+      }
+
+      return datos;
+    } catch (error) {
+      this.logger.error(
+        'No se pudieron obtener los valores y tipos de trámite del sistema de gestión',
+        error as Error,
+      );
+      throw new InternalServerErrorException(
+        'No pudimos obtener los valores en este momento. Intente nuevamente en unos minutos.',
+      );
+    }
+  }
+
+  /**
    * El orden que devuelve el PHP no sirve: los ORDER BY van dentro de cada
    * rama de un UNION y MySQL los descarta, así que llegan mezclados (se vio
    * un comprobante de 2025 delante de otros de 2026).

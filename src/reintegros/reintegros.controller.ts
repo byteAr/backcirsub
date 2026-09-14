@@ -40,7 +40,26 @@ export class ReintegrosController {
     return this.reintegrosService.getOrdenesPago(user.id, user.dni);
   }
 
-  /** Tipos disponibles para que el front arme el selector. */
+  /**
+   * Proxy de api-list_tramite.php: valores de la mutual y tipos de trámite.
+   *
+   * El front le pega directo al PHP; esto es la salida de emergencia para
+   * cuando el navegador bloquea esa llamada por CORS. Devuelve la respuesta
+   * cruda, sin normalizar: el que la interpreta es el front.
+   */
+  @Get('listas-gestion')
+  @UseGuards(AuthGuard())
+  async getListasGestion() {
+    return this.reintegrosService.getListasGestion();
+  }
+
+  /**
+   * Tipos disponibles según la tabla del backend.
+   *
+   * Ya no lo usa el selector del front, que ahora se llena con lo que manda
+   * api-list_tramite.php. Queda porque sigue siendo la lista contra la que se
+   * valida lo que se sube.
+   */
   @Get('tipos-documento')
   getTiposDocumento() {
     return Object.entries(TIPOS_DOCUMENTO_REINTEGRO).map(
