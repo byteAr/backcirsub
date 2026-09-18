@@ -58,8 +58,11 @@ export class PushNotificationsService {
       notification: {
         title,
         body,
-        icon: '/assets/icons/icon-192x192.png',
-        badge: '/assets/icons/icon-72x72.png',
+        // Rutas del front (el service worker las resuelve contra su origen).
+        // Estaban bajo /assets/icons, que el build de Angular no publica: las
+        // push salían sin ícono.
+        icon: '/icons/icon-192x192.png',
+        badge: '/icons/icon-72x72.png',
         data: { url },
       },
     });
