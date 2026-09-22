@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { CreateCredencialDto } from './dto/create-credencial.dto';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -148,18 +148,11 @@ async updateCbu(
       ip ?? null,
     );
 
-    // 👀 DEVOLVEMOS TAMBIÉN LO QUE VINO DE PHP PARA VERLO EN EL FRONT SI QUERÉS
-    return {
-      ok,
-      sqlServer:
-        sqlOk && sqlResult.status === 'fulfilled'
-          ? Array.isArray(sqlResult.value)
-            ? sqlResult.value[0]
-            : sqlResult.value
-          : null,
-      mariaDb: phpData ?? phpError, // <- acá va literal lo que respondió o el error
-      debugKey: this.buildApiKey(),
-    };
+    // Al navegador sólo le sirve saber si quedó hecho. Antes se devolvía
+    // también la API key de gestión (debugKey) y la respuesta o el error crudo
+    // del PHP, que en un error de axios trae los headers del pedido: otra vez
+    // la key. El detalle queda en el log de arriba.
+    return { ok, sqlServer: sqlOk, mariaDb: mariaOk };
   } catch (error: any) {
     console.error('❌ Error inesperado en updateCbu:', error);
 
@@ -172,10 +165,10 @@ async updateCbu(
       ip ?? null,
     );
 
+    // Sin el mensaje del error: puede traer detalles de la base o del PHP.
     return {
       ok: false,
       message: 'Error inesperado durante la actualización de CBU',
-      error: error?.message ?? error,
     };
   }
 }
@@ -183,15 +176,18 @@ async updateCbu(
 
 
 
-  async getCbu(id:number) {
-    try {      
-      const response:any = await this.prismaService.$queryRaw`
-        EXEC sp_Personas_Cuentas_banco_CBU_OU @Personas_Id = ${id}    
-      `;    
-      
-      return response[0]
+  async getCbu(id: number) {
+    try {
+      const response: any = await this.prismaService.$queryRaw`
+        EXEC sp_Personas_Cuentas_banco_CBU_OU @Personas_Id = ${id}
+      `;
+
+      return response[0];
     } catch (error) {
-      return error
+      // Antes devolvía el error tal cual, con detalles de la base, y con
+      // status 200. Ahora se loguea y el cliente recibe un 500 genérico.
+      console.error('Error al obtener el CBU de Personas_Id=' + id, error);
+      throw new InternalServerErrorException('No pudimos obtener su CBU. Intente nuevamente en unos minutos.');
     }
   }
 
