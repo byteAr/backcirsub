@@ -1,7 +1,10 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { CredencialService } from './credencial.service';
 import { UpdateCredencialDto } from './dto/update-credencial.dto';
+import { EncuestaDto } from './dto/encuesta.dto';
 import { AuthService } from 'src/auth/auth.service';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 
 @Controller('credencial')
 export class CredencialController {
@@ -16,9 +19,19 @@ export class CredencialController {
   return this.credencialService.updateCbu(data.cbu ?? null, data.id);
   }
 
+  /**
+   * Calificación de la credencial. Antes no pedía sesión y tomaba el id del
+   * cuerpo, así que cualquiera podía calificar a nombre de cualquier
+   * asociado. Ahora exige token y el id sale de ahí.
+   *
+   * Ojo al desplegar: el ValidationPipe global rechaza campos de más
+   * (forbidNonWhitelisted), así que un front viejo que todavía mande "id" en
+   * el cuerpo recibe 400. Front y back de este cambio van juntos.
+   */
   @Post('encuesta')
-  postEncuesta(@Body('id') id:number, @Body('servicio') servicio:number, @Body('atencion') atencion:number){          
-    return this.authService.postEncuesta( id, servicio, atencion)
+  @UseGuards(AuthGuard())
+  postEncuesta(@Body() encuesta: EncuestaDto, @GetUser() user: { id: number }) {
+    return this.authService.postEncuesta(user.id, encuesta.servicio, encuesta.atencion);
   }
 
 
