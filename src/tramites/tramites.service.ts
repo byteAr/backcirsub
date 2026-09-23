@@ -38,7 +38,11 @@ export class TramitesService {
     const tramites = await this.prisma.$queryRaw`
       EXEC dbo.Tramites_OU_DETALLADO @Id = ${id}
     `;
+    // La base guarda en UTC (el contenedor de SQL Server corre en UTC a
+    // propósito), así que la zona va explícita: sin esto la hora saldría con
+    // el reloj del contenedor del backend y cambiaría según dónde corra.
     const newDate = new Date(tramites[0].Fecha_Creacion).toLocaleString('es-AR', {
+      timeZone: 'America/Argentina/Buenos_Aires',
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
