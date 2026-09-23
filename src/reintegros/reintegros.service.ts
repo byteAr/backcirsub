@@ -465,11 +465,11 @@ export class ReintegrosService {
   /**
    * Fecha y hora de Argentina en formato AAAAMMDDHHmmssSSS.
    *
-   * La zona va fija y no se toma del reloj del contenedor: el host corre en
-   * horario del este de EE.UU. y el contenedor en UTC, así que confiar en la
-   * hora local daría un nombre con la hora corrida. Los datos de zona salen
-   * del ICU que trae Node, no del sistema, así que esto funciona en Alpine
-   * sin instalar tzdata.
+   * La zona va fija y no se toma del reloj del contenedor. Hoy el contenedor
+   * ya corre en hora argentina (TZ en el compose, 23/09/2026), pero antes
+   * estaba en UTC y los nombres salían con la hora corrida; se deja explícita
+   * para no depender de eso. Los datos de zona salen del ICU que trae Node,
+   * no del sistema, así que esto funciona en Alpine sin instalar tzdata.
    */
   private marcaDeTiempo(): string {
     const ahora = new Date();
