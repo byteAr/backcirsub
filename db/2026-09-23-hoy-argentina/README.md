@@ -7,7 +7,9 @@ que en esa franja de tres horas:
 - `fn_en_fecha` y `fn_vigente` daban por vigente algo que arranca mañana, y por vencido
   algo que vence hoy;
 - `fn_fecha_siguiente` y `fn_fecha_siguiente_tramite` devolvían `NULL` o corrían un día
-  el cálculo del próximo vencimiento.
+  el cálculo del próximo vencimiento;
+- `Tramites_Cumplimentar_Estado_general` dejaba fuera del contador
+  `TramitesACumplimentarEnFecha` los que vencen hoy.
 
 El arreglo no toca ningún dato guardado: sólo cambia cómo se calcula "hoy", que ahora sale
 de `dbo.fn_hoy_ar()`. La base sigue guardando en UTC a propósito
@@ -17,7 +19,7 @@ de `dbo.fn_hoy_ar()`. La base sigue guardando en UTC a propósito
 
 | Archivo | Qué hace |
 |---|---|
-| `01-aplicar.sql` | Crea `dbo.fn_hoy_ar()` y actualiza las cuatro funciones. |
+| `01-aplicar.sql` | Crea `dbo.fn_hoy_ar()` y actualiza las cuatro funciones y el procedimiento. |
 | `02-verificar.sql` | Comprobaciones. No cambia nada, se puede correr cuando sea. |
 | `99-rollback.sql` | Deja las funciones como estaban el 23/09/2026. |
 
@@ -46,7 +48,7 @@ Lo que tiene que dar:
 - la zona `Argentina Standard Time` existe, con offset `-03:00`;
 - `fn_hoy_ar` coincide con `hoy_argentina`;
 - los cuatro casos de vigencia dan `0, 1, 1, 0`;
-- ninguna de las funciones menciona ya `GETDATE`.
+- ninguno de los objetos corregidos menciona ya `GETDATE`.
 
 Recién después, lo mismo contra producción (contenedor `sqlserver`, puerto 1433). No hace
 falta reiniciar nada: las funciones se reemplazan en caliente y la aplicación las toma en

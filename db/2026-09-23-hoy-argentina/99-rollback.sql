@@ -196,3 +196,28 @@ GO
 -- fn_hoy_ar queda sin uso. Se puede borrar, pero no molesta:
 -- DROP FUNCTION IF EXISTS [dbo].[fn_hoy_ar];
 GO
+
+--SELECCIONA TODOS LOS "Tramites" EN FORMA DETALLADA
+--SISTEMAS Feb  7 2025  3:28AM
+CREATE OR ALTER PROCEDURE [dbo].[Tramites_Cumplimentar_Estado_general]
+AS
+BEGIN
+    select t.Id, t.Detalle, tp.Detalle,
+        (select top 1 p.Apellido + ', ' + p.Nombre
+         from Personas p
+         where p.Id = t.Persona_Id_Creacion) PersonaCreacionTramite,
+        t.Fecha_Creacion, t.Fecha_Inicio, t.Fecha_Fin, t.Tipo_Perioricidad,
+        t.Prioridad, t.Id_Tramites_Grupo, t.Activo, t.Fecha_Creacion,
+        t.Persona_Id_Creacion, t.ULTIMA_MODIFICACION_,
+        (select COUNT(*) from Tramites_Cumplimentar tc
+         where tc.BORRADO_ is null and tc.Tramites_Id = t.Id) CantidadTramitesCumplimentar,
+        (select COUNT(*) FROM Tramites_Cumplimentar tc
+         where tc.Fecha_Cumplimiento > CONVERT(date,GETDATE())
+           and tc.Tramites_Id = t.id and tc.BORRADO_ is null) TramitesACumplimentarEnFecha
+    from Tramites t
+    left join Tipo_Perioricidad tp on t.Tipo_Perioricidad = tp.Id
+    where t.BORRADO_ is null
+END;
+GO
+--[dbo].[Tramites_Cumplimentar_Estado_general]
+--SELECT * FROM Tramites

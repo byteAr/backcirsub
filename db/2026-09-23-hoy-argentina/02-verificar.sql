@@ -29,10 +29,10 @@ SELECT
     dbo.fn_vigente (DATEADD(day, -1, @hoy), @hoy)                   AS vence_hoy_esperado_1,
     dbo.fn_vigente (DATEADD(day, -5, @hoy), DATEADD(day, -1, @hoy)) AS vencio_ayer_esperado_0;
 
--- 5. Las cuatro funciones ya no deben mencionar GETDATE.
+-- 5. Ninguno de estos objetos debe mencionar ya GETDATE.
 SELECT o.name,
        CASE WHEN m.definition LIKE '%GETDATE%' THEN 'TODAVIA USA GETDATE' ELSE 'ok' END AS estado
 FROM sys.sql_modules m
 JOIN sys.objects o ON o.object_id = m.object_id
-WHERE o.name IN ('fn_en_fecha', 'fn_vigente', 'fn_fecha_siguiente', 'fn_fecha_siguiente_tramite', 'fn_hoy_ar')
+WHERE o.name IN ('fn_en_fecha', 'fn_vigente', 'fn_fecha_siguiente', 'fn_fecha_siguiente_tramite', 'fn_hoy_ar', 'Tramites_Cumplimentar_Estado_general')
 ORDER BY o.name;
