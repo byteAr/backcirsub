@@ -1,3 +1,8 @@
+> **NO SE APLICARON.** El 23/09/2026 a las 14:28 se resolvió cambiando la zona del
+> contenedor de SQL Server a hora argentina, no con estos scripts. Quedan acá porque
+> siguen siendo correctos: `dbo.fn_hoy_ar()` da el día argentino sin depender del reloj
+> del contenedor. Ver `docs/fechas-y-zona-horaria.md`.
+
 # "Hoy" en hora argentina (23/09/2026)
 
 El contenedor de SQL Server corre en UTC, y cuatro funciones calculaban el día con

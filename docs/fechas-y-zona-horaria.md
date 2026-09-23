@@ -1,80 +1,75 @@
 # Fechas y zona horaria
 
-## La regla
+## Lo primero que hay que saber
 
-**La base guarda en UTC. La conversión a hora argentina se hace al leer, nunca al guardar.**
+**El 23/09/2026 a las 14:28 (hora argentina) el contenedor de SQL Server pasó de UTC a
+`America/Argentina/Buenos_Aires`.** Desde entonces `GETDATE()` devuelve la hora de acá.
 
-El contenedor de SQL Server corre en UTC y así se queda. Esto no es un descuido: todo el
-histórico se guardó con ese criterio. Si se cambiara la zona del contenedor, las filas
-nuevas quedarían en hora argentina y las viejas en UTC, **en la misma columna y sin nada
-que las distinga**. Cualquier consulta por rango de fechas que cruce esa frontera daría
-mal, y no habría forma de arreglarlo después.
+Eso parte el historial en dos, y no hay nada en el dato que lo indique:
 
-Comprobación rápida de que la base sigue en UTC:
+| Cuándo se guardó | En qué zona está |
+|---|---|
+| hasta el 23/09/2026 14:28 | UTC (3 horas adelantada) |
+| desde el 23/09/2026 14:28 | hora argentina |
 
-```sql
-SELECT GETDATE() AS local, GETUTCDATE() AS utc;  -- tienen que dar lo mismo
-```
+Una columna `datetime` no guarda de qué zona es, así que **la fecha de corte es el único
+dato que permite interpretar una fila vieja**. Si algún día hay que normalizar el
+historial, el `UPDATE` sería restarle 3 horas a todo lo anterior al corte; conviene
+hacerlo con el backup `CIRSUB_pre_tz.bak` a mano y probándolo antes en la instancia de
+pruebas.
 
-## Cómo convertir en SQL Server
+## Cómo mostrar fechas
 
-```sql
-SELECT Fecha_Creacion AT TIME ZONE 'UTC' AT TIME ZONE 'Argentina Standard Time' AS fecha_local
-FROM dbo.Tramites;
-```
-
-Se lee así: "este dato está en UTC" y después "pasalo a hora argentina". Los dos pasos son
-necesarios, porque una columna `datetime` no guarda de qué zona es.
-
-El nombre de la zona se puede verificar en la instancia:
-
-```sql
-SELECT name, current_utc_offset FROM sys.time_zone_info WHERE name LIKE '%Argentina%';
-```
-
-### El caso que más rompe: "lo de hoy"
-
-Entre las 21:00 y la medianoche de Argentina, en UTC ya es el día siguiente. Un
-procedimiento que filtre por `CAST(GETDATE() AS date)` deja afuera lo cargado en esa
-franja, o lo cuenta en el día equivocado.
-
-```sql
--- MAL: "hoy" en UTC
-WHERE CAST(Fecha_Creacion AS date) = CAST(GETDATE() AS date)
-
--- BIEN: "hoy" en Argentina
-DECLARE @hoy date = CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'Argentina Standard Time' AS date);
-WHERE CAST(Fecha_Creacion AT TIME ZONE 'UTC' AT TIME ZONE 'Argentina Standard Time' AS date) = @hoy
-```
-
-Ojo con el rendimiento: convertir la columna en el `WHERE` impide usar el índice. Para
-tablas grandes conviene convertir al revés, calculando los límites del rango en UTC una
-sola vez y comparando la columna tal cual:
-
-```sql
-DECLARE @desde datetime2 = CAST(@hoy AS datetime2) AT TIME ZONE 'Argentina Standard Time' AT TIME ZONE 'UTC';
-WHERE Fecha_Creacion >= @desde AND Fecha_Creacion < DATEADD(day, 1, @desde)
-```
-
-## Cómo se hace en esta aplicación
+Como lo guardado es hora argentina, **no hay que convertir nada**: se muestra el valor tal
+cual. La trampa es que los drivers entregan una columna `datetime` como si fuera UTC, así
+que hay que pedir el formato en UTC justamente para que no se desplace.
 
 - **Front, marcas de tiempo de la base** (`Fecha_Creacion`, `ULTIMA_MODIFICACION_`):
-  `{{ valor | date:'dd/MM/yyyy HH:mm':'-0300' }}`. Argentina no tiene horario de verano
-  desde 2009, así que el desplazamiento fijo es correcto y no depende del reloj del
-  visitante.
-- **Front, fechas elegidas en un calendario** (`Fecha_Inicio`, `Fecha_Fin`): se muestran
-  **sin hora y en UTC** (`date:'dd/MM/yyyy':'UTC'`). En esas columnas la hora no significa
-  nada, y convertirlas podría correrlas un día según qué sistema las haya cargado.
-- **Backend**: la zona va siempre explícita, con `timeZone: 'America/Argentina/Buenos_Aires'`
-  en `Intl`, aunque el contenedor ya corra en `-03`. Ver `common/gestion-api-key.ts`,
-  `reintegros.service.ts`, `descuentos.service.ts` y `tramites.service.ts`.
+  `{{ valor | date:'dd/MM/yyyy HH:mm':'UTC' }}`.
+- **Front, fechas elegidas en un calendario** (`Fecha_Inicio`, `Fecha_Fin`): sin hora,
+  `date:'dd/MM/yyyy':'UTC'`. Ahí la hora no significa nada y mostrarla confunde.
+- **Backend**: `timeZone: 'UTC'` en `Intl` por la misma razón. Ver `tramites.service.ts`.
 
-Un antecedente que justifica la insistencia: la API de gestión (`gestion.cirsubgn.org.ar`)
-espera una clave que incluye la fecha del día en Argentina. Cuando se armaba con el reloj
-del proceso, después de las 21:00 salía con la fecha del día siguiente y respondía 401.
+Las filas anteriores al corte se ven 3 horas adelantadas. Es esperable.
 
-## Contexto de infraestructura
+## Lo que sí se calcula en hora argentina
 
-Desde el 23/09/2026 el servidor de la aplicación, sus contenedores y la VM de la base
-están en `America/Argentina/Buenos_Aires`. **El contenedor de SQL Server sigue en UTC**,
-que es lo que documenta este archivo.
+Estas fechas **no** salen de la base, y siguen fijando la zona a mano. No tocarlas:
+
+- `common/gestion-api-key.ts`: la clave que espera el PHP de gestión incluye la fecha del
+  día en Argentina. Cuando se armaba con el reloj del proceso, después de las 21:00 salía
+  con la fecha del día siguiente y la API respondía 401. Costó encontrarlo.
+- `reintegros.service.ts`: el nombre de los archivos de documentación lleva la marca de
+  tiempo argentina.
+- `descuentos.service.ts`: el mes en curso.
+
+La regla: **si el valor viaja a otro sistema o queda en el nombre de un archivo, la zona va
+explícita en el código**, aunque el entorno ya esté en `-03`.
+
+## En SQL Server
+
+Con el contenedor en hora argentina, `GETDATE()` y `CAST(GETDATE() AS date)` ya dan lo que
+uno espera, y no hace falta convertir nada para lo nuevo.
+
+Para consultas que crucen la fecha de corte, el valor viejo se convierte así:
+
+```sql
+SELECT Fecha_Creacion AT TIME ZONE 'UTC' AT TIME ZONE 'Argentina Standard Time'
+FROM dbo.Tramites
+WHERE Fecha_Creacion < '2026-09-23T14:28:00';
+```
+
+En `db/2026-09-23-hoy-argentina/` quedaron unos scripts que resuelven lo mismo desde las
+funciones (`dbo.fn_hoy_ar()`), pensados para cuando la base estaba en UTC. **No se
+aplicaron**, porque se eligió cambiar la zona del contenedor. Siguen siendo correctos y no
+dependen de la zona del servidor, así que están ahí por si alguna vez se quiere volver a
+un criterio independiente del reloj del contenedor.
+
+## Infraestructura
+
+Desde el 23/09/2026 están todos en `America/Argentina/Buenos_Aires`: el servidor de la
+aplicación (192.168.1.2), sus contenedores, la VM de la base (192.168.1.3) y el contenedor
+`sqlserver`.
+
+**El contenedor `sqlserver_testing` (puerto 1435) sigue en UTC.** Si se usa para probar
+algo que dependa de fechas, tenerlo en cuenta.

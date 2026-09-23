@@ -38,11 +38,14 @@ export class TramitesService {
     const tramites = await this.prisma.$queryRaw`
       EXEC dbo.Tramites_OU_DETALLADO @Id = ${id}
     `;
-    // La base guarda en UTC (el contenedor de SQL Server corre en UTC a
-    // propósito), así que la zona va explícita: sin esto la hora saldría con
-    // el reloj del contenedor del backend y cambiaría según dónde corra.
+    // Desde el 23/09/2026 el contenedor de SQL Server corre en hora argentina,
+    // así que Fecha_Creacion ya viene con la hora de acá. El driver la entrega
+    // como si fuera UTC (una columna datetime no dice de qué zona es), y por
+    // eso se formatea en UTC: así se muestra el valor tal cual está guardado.
+    // Ojo con las filas anteriores a esa fecha: esas sí están en UTC y se ven
+    // 3 horas adelantadas. Ver docs/fechas-y-zona-horaria.md.
     const newDate = new Date(tramites[0].Fecha_Creacion).toLocaleString('es-AR', {
-      timeZone: 'America/Argentina/Buenos_Aires',
+      timeZone: 'UTC',
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
