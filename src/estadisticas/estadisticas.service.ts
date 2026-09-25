@@ -1,9 +1,31 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 
 import { RedisService } from '../redis/redis.service';
 
 export type Plataforma = 'pwa' | 'web';
 export const PLATAFORMAS: Plataforma[] = ['pwa', 'web'];
+
+/**
+ * Las vistas del asociado que se cuentan, con la ruta de /dashboard. Una lista
+ * cerrada a propósito: el nombre viene del cliente, y sin esto cualquiera
+ * podría llenar Redis de claves inventadas. "estadisticas" queda afuera: es
+ * una vista de administración, no algo que use el asociado.
+ */
+export const VISTAS = [
+  'credencial',
+  'beneficios',
+  'reintegros',
+  'descuentos',
+  'ahorros',
+  'ayuda-economica',
+  'cbu',
+  'encuesta',
+  'notificaciones',
+] as const;
+export type Vista = (typeof VISTAS)[number];
+
+/** Hasta cuántos días se puede pedir de una vez: sobra para "esta semana". */
+const MAXIMO_DIAS_PERIODO = 31;
 
 /**
  * Una sesión se cierra tras 30 minutos sin actividad. Es el criterio que usa
@@ -53,6 +75,32 @@ export interface PuntoTendencia extends Metricas {
   fecha: string;
 }
 
+/** Qué parte de los asociados del período pasó por una vista. */
+export interface UsoDeVista {
+  vista: Vista;
+  personas: number;
+  /** Sobre el total de personas del período, de 0 a 100. */
+  porcentaje: number;
+}
+
+/**
+ * Un día o varios seguidos, contado en personas: para el dashboard es la única
+ * medida que no se presta a confusión. Quien entró el lunes y el miércoles es
+ * una sola persona en la semana.
+ */
+export interface ResumenPeriodo {
+  desde: string;
+  hasta: string;
+  plataforma: Plataforma | 'todas';
+  personas: number;
+  porPlataforma: Record<Plataforma, number>;
+  /** Personas distintas en cada franja horaria, sumando todos los días. */
+  porHora: { hora: number; personas: number }[];
+  horaPico: number | null;
+  /** De la más visitada a la menos. Sólo las que alguien abrió. */
+  vistas: UsoDeVista[];
+}
+
 /**
  * Estadísticas de uso de la app, guardadas en Redis como totales por hora y
  * por día. No se guarda quién entró: las personas únicas se cuentan con
@@ -66,6 +114,7 @@ export interface PuntoTendencia extends Metricas {
  *   est:s:<fecha>:<hh>:<plat>   sesiones que empezaron en esa hora
  *   est:p:<fecha>:<hh>:<plat>   personas en esa hora (HyperLogLog)
  *   est:vd / est:sd / est:pd    lo mismo, por día completo
+ *   est:vista:<fecha>:<vista>:<plat>  personas que abrieron esa vista (HyperLogLog)
  *   est:sesion:<userId>         marca de sesión abierta, vence a los 30 min
  *   est:activos:<plat>          quién está en la app ahora: conjunto ordenado
  *                               por último latido, que se poda al consultarlo
@@ -80,7 +129,12 @@ export class EstadisticasService {
    * Anota que un asociado abrió una pantalla. Nunca rompe: si Redis falla, el
    * asociado no tiene por qué enterarse de que no se contó su visita.
    */
-  async registrar(userId: number, plataforma: Plataforma, ahora = new Date()): Promise<void> {
+  async registrar(
+    userId: number,
+    plataforma: Plataforma,
+    ahora = new Date(),
+    vista?: string,
+  ): Promise<void> {
     try {
       const { fecha, hora } = momentoArgentino(ahora);
       const id = String(userId);
@@ -100,6 +154,10 @@ export class EstadisticasService {
         this.redis.pfadd(`est:p:${fecha}:${hora}:${plataforma}`, id),
         this.redis.pfadd(`est:pd:${fecha}:${plataforma}`, id),
       ];
+
+      if (esVista(vista)) {
+        operaciones.push(this.redis.pfadd(`est:vista:${fecha}:${vista}:${plataforma}`, id));
+      }
 
       if (sesionNueva) {
         operaciones.push(
@@ -167,6 +225,68 @@ export class EstadisticasService {
       total: new Set([...enApp, ...enNavegador]).size,
       pwa: enApp.length,
       web: enNavegador.length,
+    };
+  }
+
+  /**
+   * Personas de un período —un día, o de lunes a hoy—, por hora, por
+   * plataforma y por vista. Todo se cuenta como unión: quien entró varios días
+   * o por varias vías cuenta una vez.
+   */
+  async periodo(desde: string, hasta: string, plataforma?: Plataforma): Promise<ResumenPeriodo> {
+    const fechas = diasEntre(desde, hasta);
+    if (fechas.length === 0) {
+      throw new BadRequestException('La fecha "desde" no puede ser posterior a "hasta"');
+    }
+    if (fechas.length > MAXIMO_DIAS_PERIODO) {
+      throw new BadRequestException(`El período no puede superar los ${MAXIMO_DIAS_PERIODO} días`);
+    }
+
+    const elegidas = plataforma ? [plataforma] : PLATAFORMAS;
+    const todas = (armar: (fecha: string, plat: Plataforma) => string, plats = elegidas) =>
+      fechas.flatMap((f) => plats.map((p) => armar(f, p)));
+
+    const personas = await this.redis.pfcount(...todas((f, p) => `est:pd:${f}:${p}`));
+
+    const [pwa, web] = await Promise.all(
+      PLATAFORMAS.map((plat) => this.redis.pfcount(...todas((f) => `est:pd:${f}:${plat}`, [plat]))),
+    );
+
+    const porHora = await Promise.all(
+      Array.from({ length: 24 }, async (_, h) => ({
+        hora: h,
+        personas: await this.redis.pfcount(...todas((f, p) => `est:p:${f}:${hh(h)}:${p}`)),
+      })),
+    );
+
+    const vistas = (
+      await Promise.all(
+        VISTAS.map(async (vista) => {
+          const enLaVista = await this.redis.pfcount(...todas((f, p) => `est:vista:${f}:${vista}:${p}`));
+          return {
+            vista,
+            personas: enLaVista,
+            // Tope en 100: el HyperLogLog estima, y en números chicos una
+            // vista podría dar una persona más que el total.
+            porcentaje: personas ? Math.min(100, Math.round((enLaVista / personas) * 100)) : 0,
+          };
+        }),
+      )
+    )
+      .filter((v) => v.personas > 0)
+      .sort((a, b) => b.personas - a.personas);
+
+    const pico = porHora.reduce((mejor, h) => (h.personas > mejor.personas ? h : mejor), porHora[0]);
+
+    return {
+      desde,
+      hasta,
+      plataforma: plataforma ?? 'todas',
+      personas,
+      porPlataforma: { pwa, web },
+      porHora,
+      horaPico: pico.personas > 0 ? pico.hora : null,
+      vistas,
     };
   }
 
@@ -263,6 +383,20 @@ export function momentoArgentino(instante: Date): { fecha: string; hora: string 
 
   const parte = (tipo: string) => partes.find((p) => p.type === tipo)!.value;
   return { fecha: `${parte('year')}-${parte('month')}-${parte('day')}`, hora: parte('hour') };
+}
+
+/** Todas las fechas de `desde` a `hasta`, inclusive. Vacío si están al revés. */
+export function diasEntre(desde: string, hasta: string): string[] {
+  const inicio = new Date(`${desde}T12:00:00Z`).getTime();
+  const fin = new Date(`${hasta}T12:00:00Z`).getTime();
+  if (Number.isNaN(inicio) || Number.isNaN(fin) || inicio > fin) return [];
+
+  const cantidad = Math.round((fin - inicio) / 86_400_000) + 1;
+  return diasHacia(hasta, cantidad);
+}
+
+function esVista(valor: string | undefined): valor is Vista {
+  return !!valor && (VISTAS as readonly string[]).includes(valor);
 }
 
 /** Las `cantidad` fechas que terminan en `hasta`, en orden. */

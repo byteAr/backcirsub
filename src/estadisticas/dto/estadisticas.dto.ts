@@ -7,6 +7,29 @@ import { PLATAFORMAS, Plataforma } from '../estadisticas.service';
 export class RegistrarActividadDto {
   @IsIn(PLATAFORMAS, { message: 'La plataforma tiene que ser pwa o web' })
   plataforma: Plataforma;
+
+  /** La ruta dentro de /dashboard. Las que no están en la lista se ignoran. */
+  @IsOptional()
+  @Matches(/^[a-z-]{2,40}$/, { message: 'La vista no tiene un formato válido' })
+  vista?: string;
+}
+
+/** El latido no abre ninguna pantalla: sólo dice desde dónde sigue abierta. */
+export class LatidoDto {
+  @IsIn(PLATAFORMAS, { message: 'La plataforma tiene que ser pwa o web' })
+  plataforma: Plataforma;
+}
+
+export class ConsultaPeriodoDto {
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'La fecha va como AAAA-MM-DD' })
+  desde: string;
+
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'La fecha va como AAAA-MM-DD' })
+  hasta: string;
+
+  @IsOptional()
+  @IsIn(PLATAFORMAS, { message: 'La plataforma tiene que ser pwa o web' })
+  plataforma?: Plataforma;
 }
 
 /**

@@ -15,8 +15,10 @@ import { GetUser } from '../auth/decorators/get-user.decorator';
 import { AccesosEstadisticasService } from './accesos-estadisticas.service';
 import {
   ConsultaDiaDto,
+  ConsultaPeriodoDto,
   ConsultaTendenciaDto,
   DniDto,
+  LatidoDto,
   RegistrarActividadDto,
 } from './dto/estadisticas.dto';
 import { EstadisticasService } from './estadisticas.service';
@@ -40,13 +42,13 @@ export class EstadisticasController {
   @Post('actividad')
   @HttpCode(204)
   async registrar(@Body() dto: RegistrarActividadDto, @GetUser() usuario: Usuario): Promise<void> {
-    await this.estadisticas.registrar(usuario.id, dto.plataforma);
+    await this.estadisticas.registrar(usuario.id, dto.plataforma, new Date(), dto.vista);
   }
 
   /** La app sigue abierta y a la vista: mantiene al asociado en "ahora". */
   @Post('latido')
   @HttpCode(204)
-  async latido(@Body() dto: RegistrarActividadDto, @GetUser() usuario: Usuario): Promise<void> {
+  async latido(@Body() dto: LatidoDto, @GetUser() usuario: Usuario): Promise<void> {
     await this.estadisticas.latido(usuario.id, dto.plataforma);
   }
 
@@ -64,6 +66,13 @@ export class EstadisticasController {
   async ahora(@GetUser() usuario: Usuario) {
     await this.accesos.exigirQuePuedaVer(usuario.dni);
     return this.estadisticas.activosAhora();
+  }
+
+  /** Un día o de lunes a hoy: lo que muestra el dashboard. */
+  @Get('periodo')
+  async periodo(@Query() consulta: ConsultaPeriodoDto, @GetUser() usuario: Usuario) {
+    await this.accesos.exigirQuePuedaVer(usuario.dni);
+    return this.estadisticas.periodo(consulta.desde, consulta.hasta, consulta.plataforma);
   }
 
   @Get('dia')

@@ -2,7 +2,7 @@ import { ForbiddenException } from '@nestjs/common';
 
 import { AccesosEstadisticasService } from './accesos-estadisticas.service';
 import { SalidaController } from './salida.controller';
-import { diasHacia, EstadisticasService, momentoArgentino } from './estadisticas.service';
+import { diasEntre, diasHacia, EstadisticasService, momentoArgentino } from './estadisticas.service';
 
 /**
  * Redis en memoria, con lo justo. Los HyperLogLog se simulan con conjuntos:
@@ -167,6 +167,74 @@ describe('EstadisticasService', () => {
     expect(puntos[0].fecha).toBe('2026-09-19');
   });
 
+  describe('período', () => {
+    /** Un instante a una hora argentina de un día de septiembre de 2026. */
+    const el = (dia: number, hora: number) => new Date(Date.UTC(2026, 8, dia, hora + 3));
+
+    it('en la semana, quien entró varios días cuenta una sola vez', async () => {
+      await servicio.registrar(1, 'pwa', el(21, 9)); // lunes
+      await servicio.registrar(1, 'pwa', el(23, 9)); // miércoles
+      await servicio.registrar(2, 'web', el(22, 10)); // martes
+
+      const semana = await servicio.periodo('2026-09-21', '2026-09-23');
+
+      expect(semana.personas).toBe(2);
+      expect(semana.porPlataforma).toEqual({ pwa: 1, web: 1 });
+    });
+
+    it('un solo día es un período de un día', async () => {
+      await servicio.registrar(1, 'pwa', el(22, 9));
+      await servicio.registrar(2, 'pwa', el(23, 9));
+
+      expect((await servicio.periodo('2026-09-23', '2026-09-23')).personas).toBe(1);
+    });
+
+    it('cuenta qué porcentaje de las personas pasó por cada vista', async () => {
+      await servicio.registrar(1, 'pwa', el(25, 9), 'credencial');
+      await servicio.registrar(2, 'pwa', el(25, 9), 'credencial');
+      await servicio.registrar(3, 'web', el(25, 9), 'credencial');
+      await servicio.registrar(4, 'web', el(25, 9), 'credencial');
+      await servicio.registrar(1, 'pwa', el(25, 9), 'beneficios');
+
+      const dia = await servicio.periodo('2026-09-25', '2026-09-25');
+
+      expect(dia.vistas).toEqual([
+        { vista: 'credencial', personas: 4, porcentaje: 100 },
+        { vista: 'beneficios', personas: 1, porcentaje: 25 },
+      ]);
+    });
+
+    it('la misma persona abriendo varias veces una vista cuenta una', async () => {
+      await servicio.registrar(1, 'pwa', el(25, 9), 'descuentos');
+      await servicio.registrar(1, 'pwa', el(25, 11), 'descuentos');
+
+      expect((await servicio.periodo('2026-09-25', '2026-09-25')).vistas[0].personas).toBe(1);
+    });
+
+    it('una vista que no está en la lista se ignora: nadie puede inventar claves', async () => {
+      await servicio.registrar(1, 'pwa', el(25, 9), 'estadisticas');
+      await servicio.registrar(1, 'pwa', el(25, 9), 'cualquier-cosa');
+
+      const dia = await servicio.periodo('2026-09-25', '2026-09-25');
+
+      expect(dia.vistas).toEqual([]);
+      expect(dia.personas).toBe(1);
+    });
+
+    it('la hora pico de la semana es la franja con más personas distintas', async () => {
+      await servicio.registrar(1, 'web', el(21, 18));
+      await servicio.registrar(2, 'web', el(22, 18));
+      await servicio.registrar(3, 'web', el(23, 10));
+
+      expect((await servicio.periodo('2026-09-21', '2026-09-23')).horaPico).toBe(18);
+    });
+
+    it('rechaza un período al revés o demasiado largo', async () => {
+      await expect(servicio.periodo('2026-09-25', '2026-09-21')).rejects.toThrow();
+      await expect(servicio.periodo('2026-01-01', '2026-09-25')).rejects.toThrow();
+    });
+  });
+
   describe('usando la app ahora', () => {
     it('cuenta a quien estuvo activo en los últimos 2 minutos', async () => {
       await servicio.registrar(1, 'pwa', a(10, 0));
@@ -260,6 +328,16 @@ describe('fechas', () => {
       fecha: '2026-09-25',
       hora: '22',
     });
+  });
+
+  it('lista los días de un período, inclusive', () => {
+    expect(diasEntre('2026-09-28', '2026-10-01')).toEqual([
+      '2026-09-28',
+      '2026-09-29',
+      '2026-09-30',
+      '2026-10-01',
+    ]);
+    expect(diasEntre('2026-09-25', '2026-09-24')).toEqual([]);
   });
 
   it('cuenta días hacia atrás cruzando de mes', () => {
