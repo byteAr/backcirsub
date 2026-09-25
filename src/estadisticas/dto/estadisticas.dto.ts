@@ -1,10 +1,23 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, Matches, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsJWT, IsOptional, Matches, Max, Min } from 'class-validator';
 
 import { PLATAFORMAS, Plataforma } from '../estadisticas.service';
 
 /** Lo que manda la app cada vez que el asociado abre una pantalla. */
 export class RegistrarActividadDto {
+  @IsIn(PLATAFORMAS, { message: 'La plataforma tiene que ser pwa o web' })
+  plataforma: Plataforma;
+}
+
+/**
+ * La señal de salida. Viaja con el token en el cuerpo y no en la cabecera
+ * porque se manda con navigator.sendBeacon, que es lo único que sale con
+ * seguridad mientras la app se está cerrando, y no deja poner cabeceras.
+ */
+export class SalidaDto {
+  @IsJWT()
+  token: string;
+
   @IsIn(PLATAFORMAS, { message: 'La plataforma tiene que ser pwa o web' })
   plataforma: Plataforma;
 }

@@ -1,6 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 
 import { AccesosEstadisticasService } from './accesos-estadisticas.service';
+import { SalidaController } from './salida.controller';
 import { diasHacia, EstadisticasService, momentoArgentino } from './estadisticas.service';
 
 /**
@@ -55,6 +56,8 @@ class RedisFalso {
     return borrados;
   }
   async zcard(k: string) { return this.ordenados.get(k)?.size ?? 0; }
+  async zrem(k: string, m: string) { return this.ordenados.get(k)?.delete(m) ? 1 : 0; }
+  async zmiembros(k: string) { return [...(this.ordenados.get(k)?.keys() ?? [])]; }
   /** Simula que pasaron los 30 minutos y la sesión venció. */
   vencerSesion(userId: number) { this.valores.delete(`est:sesion:${userId}`); }
 }
@@ -165,35 +168,55 @@ describe('EstadisticasService', () => {
   });
 
   describe('usando la app ahora', () => {
-    it('cuenta a quien hizo algo en los últimos 5 minutos', async () => {
+    it('cuenta a quien estuvo activo en los últimos 2 minutos', async () => {
       await servicio.registrar(1, 'pwa', a(10, 0));
-      await servicio.registrar(2, 'web', a(10, 3));
+      await servicio.registrar(2, 'web', a(10, 1));
 
-      expect(await servicio.activosAhora(a(10, 4))).toEqual({ total: 2, pwa: 1, web: 1 });
+      expect(await servicio.activosAhora(a(10, 1))).toEqual({ total: 2, pwa: 1, web: 1 });
     });
 
-    it('a los 5 minutos sin actividad deja de contarlo', async () => {
+    it('sin latido ni actividad, a los 2 minutos deja de contarlo', async () => {
       await servicio.registrar(1, 'pwa', a(10, 0));
-      await servicio.registrar(2, 'pwa', a(10, 8));
+      await servicio.registrar(2, 'pwa', a(10, 3));
 
-      expect(await servicio.activosAhora(a(10, 9))).toEqual({ total: 1, pwa: 1, web: 0 });
+      expect(await servicio.activosAhora(a(10, 4))).toEqual({ total: 1, pwa: 1, web: 0 });
+    });
+
+    it('el latido lo mantiene aunque no abra pantallas nuevas', async () => {
+      await servicio.registrar(1, 'pwa', a(10, 0));
+      await servicio.latido(1, 'pwa', a(10, 5));
+
+      expect((await servicio.activosAhora(a(10, 6))).total).toBe(1);
+    });
+
+    it('el latido no suma visitas: no abrió ninguna pantalla', async () => {
+      await servicio.registrar(1, 'pwa', a(10, 0));
+      await servicio.latido(1, 'pwa', a(10, 1));
+      await servicio.latido(1, 'pwa', a(10, 2));
+
+      expect((await servicio.dia('2026-09-25')).totales.visitas).toBe(1);
+    });
+
+    it('al cerrar la app sale de la cuenta en el acto', async () => {
+      await servicio.registrar(1, 'pwa', a(10, 0));
+      await servicio.salida(1, 'pwa');
+
+      expect(await servicio.activosAhora(a(10, 0))).toEqual({ total: 0, pwa: 0, web: 0 });
+    });
+
+    it('si cierra la app pero sigue en el navegador, sigue contando ahí', async () => {
+      await servicio.registrar(1, 'pwa', a(10, 0));
+      await servicio.registrar(1, 'web', a(10, 0));
+      await servicio.salida(1, 'pwa');
+
+      expect(await servicio.activosAhora(a(10, 1))).toEqual({ total: 1, pwa: 0, web: 1 });
     });
 
     it('quien está en la app y en el navegador a la vez es una sola persona', async () => {
       await servicio.registrar(1, 'pwa', a(10, 0));
       await servicio.registrar(1, 'web', a(10, 1));
 
-      const activos = await servicio.activosAhora(a(10, 2));
-
-      expect(activos.total).toBe(1);
-      expect(activos.pwa + activos.web).toBe(2);
-    });
-
-    it('el que sigue navegando sigue contando, aunque haya entrado hace rato', async () => {
-      await servicio.registrar(1, 'web', a(10, 0));
-      await servicio.registrar(1, 'web', a(10, 20));
-
-      expect((await servicio.activosAhora(a(10, 22))).total).toBe(1);
+      expect(await servicio.activosAhora(a(10, 1))).toEqual({ total: 1, pwa: 1, web: 1 });
     });
   });
 
@@ -201,6 +224,33 @@ describe('EstadisticasService', () => {
     redis.incr = () => Promise.reject(new Error('caído'));
 
     await expect(servicio.registrar(1, 'web', a(9))).resolves.toBeUndefined();
+  });
+});
+
+describe('SalidaController', () => {
+  let estadisticas: { salida: jest.Mock };
+  let jwt: { verifyAsync: jest.Mock };
+  let controlador: SalidaController;
+
+  beforeEach(() => {
+    estadisticas = { salida: jest.fn().mockResolvedValue(undefined) };
+    jwt = { verifyAsync: jest.fn() };
+    controlador = new SalidaController(jwt as any, estadisticas as any);
+  });
+
+  it('con un token válido saca al dueño del token, no a otro', async () => {
+    jwt.verifyAsync.mockResolvedValue({ id: 42, dni: '30000000' });
+
+    await controlador.salida({ token: 'a.b.c', plataforma: 'pwa' });
+
+    expect(estadisticas.salida).toHaveBeenCalledWith(42, 'pwa');
+  });
+
+  it('con un token vencido o falso no hace nada, y tampoco rompe', async () => {
+    jwt.verifyAsync.mockRejectedValue(new Error('jwt expired'));
+
+    await expect(controlador.salida({ token: 'a.b.c', plataforma: 'web' })).resolves.toBeUndefined();
+    expect(estadisticas.salida).not.toHaveBeenCalled();
   });
 });
 

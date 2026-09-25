@@ -43,6 +43,13 @@ export class EstadisticasController {
     await this.estadisticas.registrar(usuario.id, dto.plataforma);
   }
 
+  /** La app sigue abierta y a la vista: mantiene al asociado en "ahora". */
+  @Post('latido')
+  @HttpCode(204)
+  async latido(@Body() dto: RegistrarActividadDto, @GetUser() usuario: Usuario): Promise<void> {
+    await this.estadisticas.latido(usuario.id, dto.plataforma);
+  }
+
   /** Si el asociado ve las estadísticas, y si además administra los accesos. */
   @Get('permiso')
   async permiso(@GetUser() usuario: Usuario) {

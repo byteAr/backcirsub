@@ -13,11 +13,15 @@ export const PLATAFORMAS: Plataforma[] = ['pwa', 'web'];
 const DURACION_SESION = 30 * 60;
 
 /**
- * "Usando la app ahora" es haber hecho algo en los últimos 5 minutos. Es la
- * ventana que usan los paneles en vivo: más corta y cuenta a quien está
- * leyendo una pantalla sin tocar nada; más larga y deja de ser "ahora".
+ * "Usando la app ahora" se sostiene con un latido: mientras la app está a la
+ * vista, avisa cada 30 segundos que sigue ahí. Al cerrarla o mandarla al
+ * fondo, avisa que se fue y sale de la cuenta en el acto.
+ *
+ * Esta ventana es la red de seguridad para cuando la salida no llega —el
+ * teléfono se quedó sin señal, el sistema mató la app—: en el peor caso,
+ * alguien figura conectado dos minutos de más. Cuatro latidos de margen.
  */
-export const VENTANA_ACTIVOS_MS = 5 * 60 * 1000;
+export const VENTANA_ACTIVOS_MS = 2 * 60 * 1000;
 
 export interface ActivosAhora {
   total: number;
@@ -63,8 +67,8 @@ export interface PuntoTendencia extends Metricas {
  *   est:p:<fecha>:<hh>:<plat>   personas en esa hora (HyperLogLog)
  *   est:vd / est:sd / est:pd    lo mismo, por día completo
  *   est:sesion:<userId>         marca de sesión abierta, vence a los 30 min
- *   est:activos[:<plat>]        quién hizo algo hace poco: conjunto ordenado
- *                               por instante, que se poda al consultarlo
+ *   est:activos:<plat>          quién está en la app ahora: conjunto ordenado
+ *                               por último latido, que se poda al consultarlo
  */
 @Injectable()
 export class EstadisticasService {
@@ -90,7 +94,6 @@ export class EstadisticasService {
       const instante = ahora.getTime();
       const operaciones: Promise<unknown>[] = [
         // Para "usando la app ahora": el último momento en que se lo vio.
-        this.redis.zadd('est:activos', instante, id),
         this.redis.zadd(`est:activos:${plataforma}`, instante, id),
         this.redis.incr(`est:v:${fecha}:${hora}:${plataforma}`),
         this.redis.incr(`est:vd:${fecha}:${plataforma}`),
@@ -115,20 +118,56 @@ export class EstadisticasService {
   }
 
   /**
+   * La app sigue abierta y a la vista, aunque el asociado no toque nada.
+   * Mantiene la presencia y estira la sesión, pero no es una visita: no abrió
+   * ninguna pantalla nueva.
+   */
+  async latido(userId: number, plataforma: Plataforma, ahora = new Date()): Promise<void> {
+    try {
+      const id = String(userId);
+      await Promise.all([
+        this.redis.zadd(`est:activos:${plataforma}`, ahora.getTime(), id),
+        this.redis.expire(`est:sesion:${id}`, DURACION_SESION),
+      ]);
+    } catch (error) {
+      this.logger.warn(`No se pudo registrar el latido de userId=${userId}: ${error?.message ?? error}`);
+    }
+  }
+
+  /**
+   * Cerró la app o la mandó al fondo: sale de "usando la app ahora" en el
+   * acto, sólo en esa plataforma. Si sigue con el navegador abierto en la
+   * compu, ahí sigue contando.
+   */
+  async salida(userId: number, plataforma: Plataforma): Promise<void> {
+    try {
+      await this.redis.zrem(`est:activos:${plataforma}`, String(userId));
+    } catch (error) {
+      this.logger.warn(`No se pudo registrar la salida de userId=${userId}: ${error?.message ?? error}`);
+    }
+  }
+
+  /**
    * Cuántas personas están usando la app en este momento. Primero se borra lo
-   * viejo, así el conjunto nunca crece más que la gente activa.
+   * viejo, así los conjuntos nunca crecen más que la gente activa.
    *
    * El total no es la suma de las dos plataformas: quien tiene la app abierta
-   * en el celular y el navegador en la compu es una sola persona.
+   * en el celular y el navegador en la compu es una sola persona. Por eso se
+   * cuenta la unión, y no un conjunto aparte que habría que mantener en
+   * sincronía con cada salida.
    */
   async activosAhora(ahora = new Date()): Promise<ActivosAhora> {
     const corte = ahora.getTime() - VENTANA_ACTIVOS_MS;
-    const claves = ['est:activos', 'est:activos:pwa', 'est:activos:web'];
+    const claves = PLATAFORMAS.map((p) => `est:activos:${p}`);
 
     await Promise.all(claves.map((k) => this.redis.zremrangebyscore(k, 0, corte)));
-    const [total, pwa, web] = await Promise.all(claves.map((k) => this.redis.zcard(k)));
+    const [enApp, enNavegador] = await Promise.all(claves.map((k) => this.redis.zmiembros(k)));
 
-    return { total, pwa, web };
+    return {
+      total: new Set([...enApp, ...enNavegador]).size,
+      pwa: enApp.length,
+      web: enNavegador.length,
+    };
   }
 
   /** Las métricas de un día, hora por hora. */

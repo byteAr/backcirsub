@@ -104,6 +104,16 @@ export class RedisService implements OnModuleDestroy {
     return this.redisClient.zremrangebyscore(key, min, max);
   }
 
+  /** Saca un miembro de un conjunto ordenado. */
+  async zrem(key: string, miembro: string): Promise<number> {
+    return this.redisClient.zrem(key, miembro);
+  }
+
+  /** Todos los miembros de un conjunto ordenado. */
+  async zmiembros(key: string): Promise<string[]> {
+    return this.redisClient.zrange(key, 0, -1);
+  }
+
   /** Cuántos miembros tiene un conjunto ordenado. */
   async zcard(key: string): Promise<number> {
     return this.redisClient.zcard(key);
