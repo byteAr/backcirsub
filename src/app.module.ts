@@ -10,6 +10,7 @@ import { TwilioModule } from './twilio/twilio.module';
 import { CredencialModule } from './credencial/credencial.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { AdminNotificationsModule } from './admin-notifications/admin-notifications.module';
+import { EstadisticasModule } from './estadisticas/estadisticas.module';
 import { ReintegrosModule } from './reintegros/reintegros.module';
 import { DescuentosModule } from './descuentos/descuentos.module';
 
@@ -25,6 +26,7 @@ import { DescuentosModule } from './descuentos/descuentos.module';
     CredencialModule,
     PushNotificationsModule,
     AdminNotificationsModule,
+    EstadisticasModule,
     ReintegrosModule,
     DescuentosModule,
   ],
