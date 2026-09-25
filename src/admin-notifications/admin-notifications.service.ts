@@ -3,15 +3,21 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { SendAdminNotifDto } from './dto/send-admin-notif.dto';
+import { SendAllAdminNotifDto } from './dto/send-all-admin-notif.dto';
+import { DestinatariosGestionService } from './destinatarios-gestion.service';
 import { AdminMessage } from './interfaces/admin-message.interface';
 import * as crypto from 'crypto';
 
 const SUPER_ADMIN_DNIS = ['34824092', '21677083'];
+
+/** Cuántos envíos van en paralelo en un envío masivo. */
+const TANDA = 25;
 
 @Injectable()
 export class AdminNotificationsService {
@@ -21,6 +27,7 @@ export class AdminNotificationsService {
     private readonly redisService: RedisService,
     private readonly prisma: PrismaService,
     private readonly pushService: PushNotificationsService,
+    private readonly destinatarios: DestinatariosGestionService,
   ) {}
 
   async getPermission(
@@ -171,5 +178,145 @@ export class AdminNotificationsService {
   async markRead(userId: number): Promise<{ ok: boolean }> {
     await this.redisService.set(`admin:unread:${userId}`, '0');
     return { ok: true };
+  }
+
+  /**
+   * Cuánta gente recibiría un envío masivo. Sirve para que el panel muestre el
+   * número antes de mandar nada: son asociados de verdad.
+   *
+   * `enGestion` es el padrón que devuelve el PHP —los que se registraron— y
+   * `conApp` los que además tienen una suscripción push viva. La diferencia
+   * entre los dos es gente que se registró pero no aceptó las notificaciones,
+   * borró la app o dejó pasar los 90 días de la suscripción: a esos el mensaje
+   * les queda guardado y lo ven al entrar.
+   */
+  async contarAudiencia(): Promise<{ enGestion: number; conApp: number }> {
+    const ids = await this.destinatarios.obtenerIds();
+    const suscriptos = await this.idsConSuscripcion();
+
+    return {
+      enGestion: ids.length,
+      conApp: ids.filter((id) => suscriptos.has(id)).length,
+    };
+  }
+
+  /**
+   * Manda una notificación a todo el padrón de la app.
+   *
+   * Queda reservado a los super admins: un envío alcanza a cientos de
+   * asociados reales y no se puede deshacer.
+   *
+   * A cada uno le queda el mensaje guardado, tenga o no suscripción push, así
+   * que quien no reciba el aviso igual lo encuentra al entrar. Se manda de a
+   * tandas para no abrir cientos de conexiones de una.
+   */
+  async sendNotificationToAll(
+    dto: SendAllAdminNotifDto,
+    callerDni: string,
+  ): Promise<{
+    ok: boolean;
+    destinatarios: number;
+    notificados: number;
+    sinSuscripcion: number;
+    fallidos: number;
+  }> {
+    if (!SUPER_ADMIN_DNIS.includes(callerDni)) {
+      throw new ForbiddenException(
+        'Solo los super admins pueden enviar a todos los asociados',
+      );
+    }
+
+    const { titulo, cuerpo } = dto;
+    const ids = await this.destinatarios.obtenerIds();
+
+    if (ids.length === 0) {
+      throw new ServiceUnavailableException(
+        'No se pudo obtener el padrón de asociados del sistema de gestión',
+      );
+    }
+
+    const senderName = await this.nombreDelRemitente(callerDni);
+    const suscriptos = await this.idsConSuscripcion();
+    const url = `/auth/login?notify=1&title=${encodeURIComponent(titulo)}&body=${encodeURIComponent(cuerpo)}`;
+
+    let notificados = 0;
+    let sinSuscripcion = 0;
+    let fallidos = 0;
+
+    for (let i = 0; i < ids.length; i += TANDA) {
+      const tanda = ids.slice(i, i + TANDA);
+
+      await Promise.all(
+        tanda.map(async (userId) => {
+          try {
+            await this.guardarMensaje(userId, titulo, cuerpo, senderName);
+
+            if (!suscriptos.has(userId)) {
+              sinSuscripcion++;
+              return;
+            }
+
+            const push = await this.pushService.sendPushToUser(userId, titulo, cuerpo, url);
+            if (push.ok) notificados++;
+            else fallidos++;
+          } catch (error) {
+            fallidos++;
+            this.logger.warn(`Falló el envío masivo a userId=${userId}: ${error?.message ?? error}`);
+          }
+        }),
+      );
+    }
+
+    this.logger.log(
+      `Envío masivo de ${senderName}: ${ids.length} destinatarios, ` +
+        `${notificados} notificados, ${sinSuscripcion} sin suscripción, ${fallidos} fallidos`,
+    );
+
+    return { ok: true, destinatarios: ids.length, notificados, sinSuscripcion, fallidos };
+  }
+
+  /** Los userId que tienen una suscripción push guardada en Redis. */
+  private async idsConSuscripcion(): Promise<Set<number>> {
+    const claves = await this.redisService.keys('push:sub:*');
+
+    return new Set(
+      claves
+        .map((clave) => Number(clave.slice('push:sub:'.length)))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    );
+  }
+
+  private async nombreDelRemitente(dni: string): Promise<string> {
+    try {
+      const remitente = await this.searchByDni(dni);
+      return `${remitente.nombre} ${remitente.apellido}`;
+    } catch {
+      return `DNI ${dni}`;
+    }
+  }
+
+  /** Deja el mensaje en la bandeja del asociado y le suma uno a los sin leer. */
+  private async guardarMensaje(
+    userId: number,
+    titulo: string,
+    cuerpo: string,
+    senderName: string,
+  ): Promise<void> {
+    const messagesKey = `admin:msgs:${userId}`;
+    const unreadKey = `admin:unread:${userId}`;
+
+    const existing = await this.redisService.get(messagesKey);
+    const messages: AdminMessage[] = existing ? JSON.parse(existing) : [];
+    messages.push({
+      id: crypto.randomUUID(),
+      titulo,
+      cuerpo,
+      fecha: new Date().toISOString(),
+      senderName,
+    });
+    await this.redisService.set(messagesKey, JSON.stringify(messages));
+
+    const sinLeer = await this.redisService.get(unreadKey);
+    await this.redisService.set(unreadKey, (sinLeer ? parseInt(sinLeer, 10) + 1 : 1).toString());
   }
 }
