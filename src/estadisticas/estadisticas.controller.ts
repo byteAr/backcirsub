@@ -52,6 +52,13 @@ export class EstadisticasController {
     };
   }
 
+  /** Quién está usando la app en este momento: lo consulta el dashboard cada pocos segundos. */
+  @Get('ahora')
+  async ahora(@GetUser() usuario: Usuario) {
+    await this.accesos.exigirQuePuedaVer(usuario.dni);
+    return this.estadisticas.activosAhora();
+  }
+
   @Get('dia')
   async dia(@Query() consulta: ConsultaDiaDto, @GetUser() usuario: Usuario) {
     await this.accesos.exigirQuePuedaVer(usuario.dni);

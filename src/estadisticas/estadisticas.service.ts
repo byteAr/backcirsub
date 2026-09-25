@@ -12,6 +12,19 @@ export const PLATAFORMAS: Plataforma[] = ['pwa', 'web'];
  */
 const DURACION_SESION = 30 * 60;
 
+/**
+ * "Usando la app ahora" es haber hecho algo en los últimos 5 minutos. Es la
+ * ventana que usan los paneles en vivo: más corta y cuenta a quien está
+ * leyendo una pantalla sin tocar nada; más larga y deja de ser "ahora".
+ */
+export const VENTANA_ACTIVOS_MS = 5 * 60 * 1000;
+
+export interface ActivosAhora {
+  total: number;
+  pwa: number;
+  web: number;
+}
+
 export interface Metricas {
   /** Asociados distintos. Uno que entra tres veces cuenta una sola. */
   personas: number;
@@ -50,6 +63,8 @@ export interface PuntoTendencia extends Metricas {
  *   est:p:<fecha>:<hh>:<plat>   personas en esa hora (HyperLogLog)
  *   est:vd / est:sd / est:pd    lo mismo, por día completo
  *   est:sesion:<userId>         marca de sesión abierta, vence a los 30 min
+ *   est:activos[:<plat>]        quién hizo algo hace poco: conjunto ordenado
+ *                               por instante, que se poda al consultarlo
  */
 @Injectable()
 export class EstadisticasService {
@@ -72,7 +87,11 @@ export class EstadisticasService {
         DURACION_SESION,
       );
 
+      const instante = ahora.getTime();
       const operaciones: Promise<unknown>[] = [
+        // Para "usando la app ahora": el último momento en que se lo vio.
+        this.redis.zadd('est:activos', instante, id),
+        this.redis.zadd(`est:activos:${plataforma}`, instante, id),
         this.redis.incr(`est:v:${fecha}:${hora}:${plataforma}`),
         this.redis.incr(`est:vd:${fecha}:${plataforma}`),
         this.redis.pfadd(`est:p:${fecha}:${hora}:${plataforma}`, id),
@@ -93,6 +112,23 @@ export class EstadisticasService {
     } catch (error) {
       this.logger.warn(`No se pudo registrar la actividad de userId=${userId}: ${error?.message ?? error}`);
     }
+  }
+
+  /**
+   * Cuántas personas están usando la app en este momento. Primero se borra lo
+   * viejo, así el conjunto nunca crece más que la gente activa.
+   *
+   * El total no es la suma de las dos plataformas: quien tiene la app abierta
+   * en el celular y el navegador en la compu es una sola persona.
+   */
+  async activosAhora(ahora = new Date()): Promise<ActivosAhora> {
+    const corte = ahora.getTime() - VENTANA_ACTIVOS_MS;
+    const claves = ['est:activos', 'est:activos:pwa', 'est:activos:web'];
+
+    await Promise.all(claves.map((k) => this.redis.zremrangebyscore(k, 0, corte)));
+    const [total, pwa, web] = await Promise.all(claves.map((k) => this.redis.zcard(k)));
+
+    return { total, pwa, web };
   }
 
   /** Las métricas de un día, hora por hora. */

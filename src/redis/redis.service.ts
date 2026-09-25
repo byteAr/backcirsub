@@ -94,6 +94,21 @@ export class RedisService implements OnModuleDestroy {
     return this.redisClient.expire(key, ttl);
   }
 
+  /** Agrega o actualiza un miembro en un conjunto ordenado, con su puntaje. */
+  async zadd(key: string, puntaje: number, miembro: string): Promise<number> {
+    return this.redisClient.zadd(key, puntaje, miembro);
+  }
+
+  /** Borra los miembros con puntaje entre min y max. */
+  async zremrangebyscore(key: string, min: number, max: number): Promise<number> {
+    return this.redisClient.zremrangebyscore(key, min, max);
+  }
+
+  /** Cuántos miembros tiene un conjunto ordenado. */
+  async zcard(key: string): Promise<number> {
+    return this.redisClient.zcard(key);
+  }
+
   // Asegura que la conexión a Redis se cierre al destruir el módulo
   async onModuleDestroy() {
     await this.redisClient.quit();

@@ -41,6 +41,20 @@ class RedisFalso {
     return true;
   }
   async expire() { return 1; }
+  ordenados = new Map<string, Map<string, number>>();
+  async zadd(k: string, puntaje: number, miembro: string) {
+    const z = this.ordenados.get(k) ?? new Map<string, number>();
+    z.set(miembro, puntaje);
+    this.ordenados.set(k, z);
+    return 1;
+  }
+  async zremrangebyscore(k: string, min: number, max: number) {
+    const z = this.ordenados.get(k);
+    let borrados = 0;
+    z?.forEach((p, m) => { if (p >= min && p <= max) { z.delete(m); borrados++; } });
+    return borrados;
+  }
+  async zcard(k: string) { return this.ordenados.get(k)?.size ?? 0; }
   /** Simula que pasaron los 30 minutos y la sesión venció. */
   vencerSesion(userId: number) { this.valores.delete(`est:sesion:${userId}`); }
 }
@@ -148,6 +162,39 @@ describe('EstadisticasService', () => {
     expect(puntos[6]).toMatchObject({ fecha: '2026-09-25', personas: 2 });
     expect(puntos[5]).toMatchObject({ fecha: '2026-09-24', personas: 1 });
     expect(puntos[0].fecha).toBe('2026-09-19');
+  });
+
+  describe('usando la app ahora', () => {
+    it('cuenta a quien hizo algo en los últimos 5 minutos', async () => {
+      await servicio.registrar(1, 'pwa', a(10, 0));
+      await servicio.registrar(2, 'web', a(10, 3));
+
+      expect(await servicio.activosAhora(a(10, 4))).toEqual({ total: 2, pwa: 1, web: 1 });
+    });
+
+    it('a los 5 minutos sin actividad deja de contarlo', async () => {
+      await servicio.registrar(1, 'pwa', a(10, 0));
+      await servicio.registrar(2, 'pwa', a(10, 8));
+
+      expect(await servicio.activosAhora(a(10, 9))).toEqual({ total: 1, pwa: 1, web: 0 });
+    });
+
+    it('quien está en la app y en el navegador a la vez es una sola persona', async () => {
+      await servicio.registrar(1, 'pwa', a(10, 0));
+      await servicio.registrar(1, 'web', a(10, 1));
+
+      const activos = await servicio.activosAhora(a(10, 2));
+
+      expect(activos.total).toBe(1);
+      expect(activos.pwa + activos.web).toBe(2);
+    });
+
+    it('el que sigue navegando sigue contando, aunque haya entrado hace rato', async () => {
+      await servicio.registrar(1, 'web', a(10, 0));
+      await servicio.registrar(1, 'web', a(10, 20));
+
+      expect((await servicio.activosAhora(a(10, 22))).total).toBe(1);
+    });
   });
 
   it('si Redis falla, registrar no rompe la navegación del asociado', async () => {
