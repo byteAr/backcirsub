@@ -77,15 +77,19 @@ export class ReintegrosService {
       const extension = this.validarExtension(nombreOriginal, file.mimetype);
       const base = this.sanitizarBase(nombreOriginal, extension);
 
-      // Formato: <TIPO>-<idUsuario>-<nombreOriginal>-<timestamp><extension>
-      //          -> RM-4-FOTO1-20260810143052871.jpg
+      // Formato: T<TIPO>-<idUsuario>-<nombreOriginal>-<timestamp><extension>
+      //          -> TRM-4-FOTO1-20260810143052871.jpg
+      //
+      // La T inicial marca que el archivo viene de un trámite iniciado desde
+      // la app. El sistema de gestión clasifica por este nombre: si se cambia,
+      // hay que avisarle al que mantiene ese lado.
       //
       // El guion separa los cuatro datos. Como sanitizarBase() convierte los
       // guiones del nombre original en guiones bajos, el nombre siempre se
       // parte en exactamente cuatro campos y no hay forma de confundir el id
       // del socio con un archivo que se llame solo con números.
       const nombreArchivo = await this.resolverNombreLibre(
-        [tipoDocumento, personasId, base, this.marcaDeTiempo()].join('-'),
+        [`T${tipoDocumento}`, personasId, base, this.marcaDeTiempo()].join('-'),
         extension,
       );
 
