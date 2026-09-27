@@ -1,3 +1,6 @@
+import { mkdtemp, readdir, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { of } from 'rxjs';
 
 import { ReintegrosService } from './reintegros.service';
@@ -179,5 +182,39 @@ describe('ReintegrosService - listas de gestión', () => {
     const { service } = construir([[{ tipo: 'val', codigo: '1', descr: 'x', valor: '1' }]]);
 
     await expect(service.getListasGestion()).rejects.toThrow();
+  });
+});
+
+/**
+ * El sistema de gestión lee los archivos de la carpeta y los clasifica por el
+ * nombre. Si el formato cambia sin avisarle, deja de reconocerlos.
+ */
+describe('ReintegrosService - nombre del archivo guardado', () => {
+  let carpeta: string;
+
+  beforeEach(async () => {
+    carpeta = await mkdtemp(join(tmpdir(), 'reintegros-'));
+  });
+
+  afterEach(async () => {
+    await rm(carpeta, { recursive: true, force: true });
+  });
+
+  const construir = () =>
+    new ReintegrosService(
+      { get: (clave: string) => (clave === 'REINTEGROS_UPLOAD_PATH' ? carpeta : undefined) } as any,
+      {} as any,
+      {} as any,
+    );
+
+  const foto = (originalname: string) =>
+    ({ originalname, mimetype: 'image/jpeg', buffer: Buffer.from('x') }) as Express.Multer.File;
+
+  it('lleva T + tipo, id del socio, nombre y marca de tiempo', async () => {
+    // RC no exige beneficio, así que no consulta el perfil.
+    await construir().guardarDocumentos([foto('FOTO1.jpg')], 'RC', 4, '30111222');
+
+    const [archivo] = await readdir(carpeta);
+    expect(archivo).toMatch(/^TRC-4-FOTO1-\d{17}\.jpg$/);
   });
 });

@@ -1,0 +1,458 @@
+{
+  "info": {
+    "name": "CIRSUB — API y gestión PHP",
+    "description": "Todos los endpoints del backend de CIRSUB, más las funciones PHP del sistema de gestión que consume.\n\n## Antes de empezar\n\n1. Elegí el entorno en las variables de la colección: `baseUrl` viene apuntando a producción. Para staging usá `https://192.168.1.2:3010` (por VPN) y desactivá la verificación de certificado en Postman (Settings → SSL certificate verification), porque el certificado es autofirmado.\n2. Corré **Auth → Login**. El token se guarda solo en la variable `token` y lo usan todas las demás peticiones.\n\n## Qué mirar\n\n- La carpeta **Gestión PHP (directo)** pega contra el sistema del otro desarrollador, sin pasar por nuestro backend. La clave `X-API-KEY` se calcula sola con la fecha argentina en un script previo, así que no hay que tocar nada.\n- Esa carpeta es la primera que hay que probar cuando en la app faltan ahorros, descuentos o tipos de trámite: casi siempre el problema está ahí y no en el backend.\n\n## Cuidado\n\nLas peticiones marcadas con ⚠️ le mandan algo a asociados de verdad (WhatsApp o notificaciones). No son de prueba.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://api.cirsubgn.org.ar", "type": "string" },
+    { "key": "gestionBase", "value": "https://gestion.cirsubgn.org.ar/Cirsub/CirsubApp/Migrante/funciones", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "apiKey", "value": "", "type": "string" },
+    { "key": "dni", "value": "34824092", "type": "string" },
+    { "key": "password", "value": "", "type": "string" },
+    { "key": "userId", "value": "", "type": "string" },
+    { "key": "tramiteId", "value": "1", "type": "string" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// La clave que espera el PHP de gestión es la fecha del día en Argentina:",
+          "// api-key-tk-DDMMYY. Se calcula acá para no tener que actualizarla a mano;",
+          "// con la fecha corrida, el PHP contesta 401.",
+          "const partes = new Intl.DateTimeFormat('es-AR', {",
+          "  timeZone: 'America/Argentina/Buenos_Aires',",
+          "  day: '2-digit', month: '2-digit', year: '2-digit',",
+          "}).formatToParts(new Date());",
+          "const parte = (t) => partes.find((p) => p.type === t).value;",
+          "pm.collectionVariables.set('apiKey', `api-key-tk-${parte('day')}${parte('month')}${parte('year')}`);"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (guarda el token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const cuerpo = pm.response.json();",
+                  "if (cuerpo.token) {",
+                  "  pm.collectionVariables.set('token', cuerpo.token);",
+                  "  console.log('Token guardado.');",
+                  "}",
+                  "const persona = cuerpo?.Persona?.[0] ?? cuerpo?.persona?.[0];",
+                  "if (persona?.Id) pm.collectionVariables.set('userId', String(persona.Id));",
+                  "pm.test('Entró bien', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"dni\": \"{{dni}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "description": "Cargá tu DNI y contraseña en las variables `dni` y `password` de la colección. El token queda guardado solo."
+          }
+        },
+        {
+          "name": "Check status (renueva el token)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/auth/check-status", "host": ["{{baseUrl}}"], "path": ["auth", "check-status"] },
+            "description": "Devuelve el perfil completo del asociado: datos, grupo familiar, beneficios y si ya respondió la encuesta."
+          }
+        },
+        {
+          "name": "Verificar DNI",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"dni\": \"{{dni}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/verify-dni", "host": ["{{baseUrl}}"], "path": ["auth", "verify-dni"] }
+          }
+        },
+        {
+          "name": "Datos de contacto",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"dni\": \"{{dni}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/get-contact", "host": ["{{baseUrl}}"], "path": ["auth", "get-contact"] }
+          }
+        },
+        {
+          "name": "⚠️ Enviar OTP por WhatsApp",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"phoneNumber\": \"+549XXXXXXXXXX\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/send-otp", "host": ["{{baseUrl}}"], "path": ["auth", "send-otp"] },
+            "description": "⚠️ Manda un WhatsApp de verdad al número que pongas. El código vive 40 minutos en Redis."
+          }
+        },
+        {
+          "name": "Verificar OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"phoneNumber\": \"+549XXXXXXXXXX\",\n  \"otp\": \"123456\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/verify-otp", "host": ["{{baseUrl}}"], "path": ["auth", "verify-otp"] }
+          }
+        },
+        {
+          "name": "Foto de perfil",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/profile-image/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "profile-image", "{{userId}}"]
+            },
+            "description": "La foto se guarda en base64 en la base, así que la respuesta puede pesar bastante."
+          }
+        },
+        {
+          "name": "⚠️ Saludo de cumpleaños",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"phoneNumber\": \"+549XXXXXXXXXX\",\n  \"nombre\": \"Juan\",\n  \"apellido\": \"Pérez\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/send-birthday-whatsapp", "host": ["{{baseUrl}}"], "path": ["auth", "send-birthday-whatsapp"] },
+            "description": "⚠️ WhatsApp real. La plantilla lleva una imagen alojada afuera: si esa imagen falla, Twilio acepta el pedido igual y el mensaje nunca llega (error 63019)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Credencial",
+      "item": [
+        {
+          "name": "Ver CBU",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/credencial", "host": ["{{baseUrl}}"], "path": ["credencial"] },
+            "description": "El asociado sale del token. Mandar un `?id=` no cambia nada: se ignora."
+          }
+        },
+        {
+          "name": "Cambiar CBU",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"cbu\": \"2850590940090418135201\"\n}" },
+            "url": { "raw": "{{baseUrl}}/credencial", "host": ["{{baseUrl}}"], "path": ["credencial"] },
+            "description": "Cambia tu propio CBU. Mandar `id` en el cuerpo da 400: el asociado sale del token.\n\nResponde 200 aunque no haya podido guardar, así que hay que mirar `ok` en la respuesta."
+          }
+        },
+        {
+          "name": "Responder la encuesta",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"servicio\": 5,\n  \"atencion\": 5\n}" },
+            "url": { "raw": "{{baseUrl}}/credencial/encuesta", "host": ["{{baseUrl}}"], "path": ["credencial", "encuesta"] },
+            "description": "Ojo: queda guardada de verdad contra tu usuario."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reintegros y trámites",
+      "item": [
+        {
+          "name": "Órdenes de pago",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/reintegros/ordenes-pago", "host": ["{{baseUrl}}"], "path": ["reintegros", "ordenes-pago"] },
+            "description": "Sale de api-ops.php. Si viene vacío, probá la carpeta de gestión: el PHP contesta 200 aunque falle."
+          }
+        },
+        {
+          "name": "Listas de gestión (valores, tipos, ahorros, ayudas)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/reintegros/listas-gestion", "host": ["{{baseUrl}}"], "path": ["reintegros", "listas-gestion"] },
+            "description": "Proxy de api-list_tramite.php, que es de donde salen los valores, los tipos de trámite, los ahorros y las ayudas económicas.\n\nCorta a los 15 segundos. Si acá no llega nada, probá el PHP directo: cuando ese script se cuelga, estas cuatro pantallas de la app quedan vacías."
+          }
+        },
+        {
+          "name": "Tipos de documento aceptados",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/reintegros/tipos-documento", "host": ["{{baseUrl}}"], "path": ["reintegros", "tipos-documento"] },
+            "description": "Constante nuestra, no depende del PHP. Es contra esta lista que se valida la subida."
+          }
+        },
+        {
+          "name": "Subir documentación",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "tipo", "value": "RM", "type": "text" },
+                { "key": "archivos", "type": "file", "src": [] }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/reintegros/documentos", "host": ["{{baseUrl}}"], "path": ["reintegros", "documentos"] },
+            "description": "Los archivos quedan en el disco del servidor, en la carpeta que lee el sistema del otro desarrollador."
+          }
+        },
+        {
+          "name": "Mis trámites",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/tramites", "host": ["{{baseUrl}}"], "path": ["tramites"] }
+          }
+        },
+        {
+          "name": "Trámite por id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/tramites/{{tramiteId}}", "host": ["{{baseUrl}}"], "path": ["tramites", "{{tramiteId}}"] }
+          }
+        },
+        {
+          "name": "Tipos de documento de trámites",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/tramites/tipodocumentos", "host": ["{{baseUrl}}"], "path": ["tramites", "tipodocumentos"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Descuentos",
+      "item": [
+        {
+          "name": "Mis descuentos",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/descuentos", "host": ["{{baseUrl}}"], "path": ["descuentos"] },
+            "description": "Sale de api-cta.php, mes a mes. El PHP mete la cuota dentro del texto del concepto, así que la normalización la hace el backend."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notificaciones push",
+      "item": [
+        {
+          "name": "Clave pública VAPID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/push/vapid-public-key", "host": ["{{baseUrl}}"], "path": ["push", "vapid-public-key"] },
+            "description": "Si esto viene vacío, el servidor no tiene las claves configuradas y no puede mandar ninguna push."
+          }
+        },
+        {
+          "name": "Registrar suscripción",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{userId}},\n  \"endpoint\": \"https://fcm.googleapis.com/fcm/send/...\",\n  \"auth\": \"...\",\n  \"keys\": {\n    \"p256dh\": \"...\",\n    \"auth\": \"...\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/push/subscribe", "host": ["{{baseUrl}}"], "path": ["push", "subscribe"] },
+            "description": "La suscripción la genera el navegador. Vive 90 días en Redis, en la clave `push:sub:<userId>`."
+          }
+        },
+        {
+          "name": "⚠️ Enviar push a un usuario",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{userId}},\n  \"title\": \"Prueba\",\n  \"body\": \"Mensaje de prueba\"\n}" },
+            "url": { "raw": "{{baseUrl}}/push/send", "host": ["{{baseUrl}}"], "path": ["push", "send"] },
+            "description": "⚠️ Le suena el teléfono a esa persona."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Panel de notificaciones (admin)",
+      "item": [
+        {
+          "name": "Mi permiso",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin-notifications/permissions/{{dni}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin-notifications", "permissions", "{{dni}}"]
+            },
+            "description": "Devuelve `superadmin`, `sender` o `null`."
+          }
+        },
+        {
+          "name": "Quiénes pueden enviar",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/admin-notifications/permissions", "host": ["{{baseUrl}}"], "path": ["admin-notifications", "permissions"] }
+          }
+        },
+        {
+          "name": "Buscar asociado por DNI",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin-notifications/search?dni={{dni}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin-notifications", "search"],
+              "query": [{ "key": "dni", "value": "{{dni}}" }]
+            }
+          }
+        },
+        {
+          "name": "Audiencia del envío masivo",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/admin-notifications/audiencia", "host": ["{{baseUrl}}"], "path": ["admin-notifications", "audiencia"] },
+            "description": "No manda nada: sólo cuenta. `enGestion` son los registrados y `conApp` los que además tienen las notificaciones prendidas."
+          }
+        },
+        {
+          "name": "⚠️ Enviar a un asociado",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"targetUserId\": {{userId}},\n  \"titulo\": \"Prueba\",\n  \"cuerpo\": \"Mensaje de prueba del sistema.\"\n}" },
+            "url": { "raw": "{{baseUrl}}/admin-notifications/send", "host": ["{{baseUrl}}"], "path": ["admin-notifications", "send"] },
+            "description": "⚠️ Le llega a esa persona: push si la tiene prendida, y el mensaje le queda en la campanita igual."
+          }
+        },
+        {
+          "name": "⚠️⚠️ Enviar a TODOS los asociados",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"titulo\": \"Prueba\",\n  \"cuerpo\": \"Mensaje de prueba del sistema.\"\n}" },
+            "url": { "raw": "{{baseUrl}}/admin-notifications/send-all", "host": ["{{baseUrl}}"], "path": ["admin-notifications", "send-all"] },
+            "description": "⚠️⚠️ Le llega a los cientos de asociados que tienen la app y **no se puede deshacer**. Sólo super admins.\n\nMirá primero la audiencia. Si el padrón de gestión no responde, devuelve 503 y no manda nada."
+          }
+        },
+        {
+          "name": "Mensajes de un usuario",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin-notifications/messages/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin-notifications", "messages", "{{userId}}"]
+            },
+            "description": "Lo que ve el asociado en la campanita, con el contador de no leídos."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Gestión PHP (directo)",
+      "description": "Las funciones del sistema del otro desarrollador, sin pasar por nuestro backend. Acá es donde conviene mirar primero cuando faltan datos en la app.\n\nTodas: POST con cuerpo JSON (form-encoded da 400) y `X-API-KEY` con la fecha argentina, que se calcula sola.\n\nDos mañas a tener presentes: contestan **HTTP 200 aunque fallen** (devuelven `{ok:0}` o el error crudo de MySQL), y **no filtran por socio**, así que devuelven lo mismo con cualquier `userId`.",
+      "item": [
+        {
+          "name": "Catálogo: valores, tipos, ahorros y ayudas",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-KEY", "value": "{{apiKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": 0,\n  \"dni\": \"0\"\n}" },
+            "url": { "raw": "{{gestionBase}}/api-list_tramite.php", "host": ["{{gestionBase}}"], "path": ["api-list_tramite.php"] },
+            "description": "Devuelve hasta cuatro ramas: valores y tipos de trámite, `{Muestra, Ahorros}` y `{Muestra, AyudasEc}`.\n\n**El 25/09/2026 este endpoint quedó colgado**: no responde y corta por tiempo. Cuando pasa eso, en la app quedan vacíos los ahorros, las ayudas económicas y los tipos de reintegro. Si tarda más de 15 segundos, el problema es del PHP."
+          }
+        },
+        {
+          "name": "Órdenes de pago (api-ops)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-KEY", "value": "{{apiKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{userId}},\n  \"dni\": \"{{dni}}\"\n}" },
+            "url": { "raw": "{{gestionBase}}/api-ops.php", "host": ["{{gestionBase}}"], "path": ["api-ops.php"] },
+            "description": "Para comprobar si filtra por socio: mandá dos DNI distintos y compará. Si devuelve lo mismo, no filtra."
+          }
+        },
+        {
+          "name": "Descuentos (api-cta)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-KEY", "value": "{{apiKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{userId}},\n  \"dni\": \"{{dni}}\"\n}" },
+            "url": { "raw": "{{gestionBase}}/api-cta.php", "host": ["{{gestionBase}}"], "path": ["api-cta.php"] }
+          }
+        },
+        {
+          "name": "Padrón de la app (Notificacion_atodos)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-KEY", "value": "{{apiKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": 0,\n  \"dni\": \"0\"\n}" },
+            "url": { "raw": "{{gestionBase}}/Notificacion_atodos.php", "host": ["{{gestionBase}}"], "path": ["Notificacion_atodos.php"] },
+            "description": "Los ids de quienes se registraron en la app: `[[{\"id\":\"75283\"}, …]]`. Sólo lee, no manda nada, pese al nombre."
+          }
+        },
+        {
+          "name": "Actualizar CBU (api-cbu)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-KEY", "value": "{{apiKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{userId}},\n  \"cbu\": \"2850590940090418135201\"\n}" },
+            "url": { "raw": "{{gestionBase}}/api-cbu.php", "host": ["{{gestionBase}}"], "path": ["api-cbu.php"] },
+            "description": "⚠️ Cambia el CBU de verdad en el sistema de gestión."
+          }
+        }
+      ]
+    }
+  ]
+}
