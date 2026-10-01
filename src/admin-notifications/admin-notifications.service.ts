@@ -118,43 +118,33 @@ export class AdminNotificationsService {
     const { role } = await this.getPermission(callerDni);
     if (!role) throw new ForbiddenException('Sin permisos para enviar notificaciones');
 
-    // Obtener nombre del remitente
-    let senderName = 'Administrador';
-    try {
-      const sender = await this.searchByDni(callerDni);
-      senderName = `${sender.nombre} ${sender.apellido}`;
-    } catch {
-      // Si no se encuentra, usamos el DNI como fallback
-      senderName = `DNI ${callerDni}`;
-    }
+    const senderName = await this.nombreDelRemitente(callerDni);
+    return this.enviarAUno(targetUserId, titulo, cuerpo, senderName);
+  }
 
-    const messagesKey = `admin:msgs:${targetUserId}`;
-    const unreadKey = `admin:unread:${targetUserId}`;
-
-    const existing = await this.redisService.get(messagesKey);
-    const messages: AdminMessage[] = existing ? JSON.parse(existing) : [];
-    const newMessage: AdminMessage = {
-      id: crypto.randomUUID(),
-      titulo,
-      cuerpo,
-      fecha: new Date().toISOString(),
-      senderName,
-    };
-    messages.push(newMessage);
-    await this.redisService.set(messagesKey, JSON.stringify(messages));
-
-    const currentUnread = await this.redisService.get(unreadKey);
-    const newUnread = currentUnread ? parseInt(currentUnread, 10) + 1 : 1;
-    await this.redisService.set(unreadKey, newUnread.toString());
+  /**
+   * Deja el mensaje en la bandeja del asociado y le manda la push. El permiso
+   * lo valida quien llama: el panel de admin por DNI, las apps externas por su
+   * clave.
+   *
+   * `pushed` en false no es un error: el mensaje quedó guardado y lo ve al
+   * entrar, sólo que no tenía las notificaciones prendidas.
+   */
+  async enviarAUno(
+    targetUserId: number,
+    titulo: string,
+    cuerpo: string,
+    senderName: string,
+  ): Promise<{ ok: boolean; pushed: boolean }> {
+    await this.guardarMensaje(targetUserId, titulo, cuerpo, senderName);
     this.logger.log(`Mensaje guardado para userId=${targetUserId} por ${senderName}`);
 
-    const url = `/auth/login?notify=1&title=${encodeURIComponent(titulo)}&body=${encodeURIComponent(cuerpo)}`;
     try {
       const pushResult = await this.pushService.sendPushToUser(
         targetUserId,
         titulo,
         cuerpo,
-        url,
+        this.urlDeLaNotificacion(titulo, cuerpo),
       );
       return { ok: true, pushed: pushResult.ok };
     } catch {
@@ -205,10 +195,6 @@ export class AdminNotificationsService {
    *
    * Queda reservado a los super admins: un envío alcanza a cientos de
    * asociados reales y no se puede deshacer.
-   *
-   * A cada uno le queda el mensaje guardado, tenga o no suscripción push, así
-   * que quien no reciba el aviso igual lo encuentra al entrar. Se manda de a
-   * tandas para no abrir cientos de conexiones de una.
    */
   async sendNotificationToAll(
     dto: SendAllAdminNotifDto,
@@ -226,7 +212,28 @@ export class AdminNotificationsService {
       );
     }
 
-    const { titulo, cuerpo } = dto;
+    const senderName = await this.nombreDelRemitente(callerDni);
+    return this.enviarATodos(dto.titulo, dto.cuerpo, senderName);
+  }
+
+  /**
+   * El envío masivo propiamente dicho. El permiso lo valida quien llama.
+   *
+   * A cada uno le queda el mensaje guardado, tenga o no suscripción push, así
+   * que quien no reciba el aviso igual lo encuentra al entrar. Se manda de a
+   * tandas para no abrir cientos de conexiones de una.
+   */
+  async enviarATodos(
+    titulo: string,
+    cuerpo: string,
+    senderName: string,
+  ): Promise<{
+    ok: boolean;
+    destinatarios: number;
+    notificados: number;
+    sinSuscripcion: number;
+    fallidos: number;
+  }> {
     const ids = await this.destinatarios.obtenerIds();
 
     if (ids.length === 0) {
@@ -235,9 +242,8 @@ export class AdminNotificationsService {
       );
     }
 
-    const senderName = await this.nombreDelRemitente(callerDni);
     const suscriptos = await this.idsConSuscripcion();
-    const url = `/auth/login?notify=1&title=${encodeURIComponent(titulo)}&body=${encodeURIComponent(cuerpo)}`;
+    const url = this.urlDeLaNotificacion(titulo, cuerpo);
 
     let notificados = 0;
     let sinSuscripcion = 0;
@@ -273,6 +279,11 @@ export class AdminNotificationsService {
     );
 
     return { ok: true, destinatarios: ids.length, notificados, sinSuscripcion, fallidos };
+  }
+
+  /** Lo que abre la app al tocar la notificación. */
+  private urlDeLaNotificacion(titulo: string, cuerpo: string): string {
+    return `/auth/login?notify=1&title=${encodeURIComponent(titulo)}&body=${encodeURIComponent(cuerpo)}`;
   }
 
   /** Los userId que tienen una suscripción push guardada en Redis. */

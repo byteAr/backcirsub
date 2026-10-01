@@ -13,5 +13,7 @@ import { DestinatariosGestionService } from './destinatarios-gestion.service';
   imports: [RedisModule, ConfigModule, AuthModule, PushNotificationsModule, PrismaModule, HttpModule],
   controllers: [AdminNotificationsController],
   providers: [AdminNotificationsService, DestinatariosGestionService],
+  // Lo usa el módulo de notificaciones externas para no duplicar el envío.
+  exports: [AdminNotificationsService],
 })
 export class AdminNotificationsModule {}

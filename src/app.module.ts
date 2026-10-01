@@ -11,6 +11,7 @@ import { CredencialModule } from './credencial/credencial.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { AdminNotificationsModule } from './admin-notifications/admin-notifications.module';
 import { EstadisticasModule } from './estadisticas/estadisticas.module';
+import { NotificacionesExternasModule } from './notificaciones-externas/notificaciones-externas.module';
 import { ReintegrosModule } from './reintegros/reintegros.module';
 import { DescuentosModule } from './descuentos/descuentos.module';
 
@@ -27,6 +28,7 @@ import { DescuentosModule } from './descuentos/descuentos.module';
     PushNotificationsModule,
     AdminNotificationsModule,
     EstadisticasModule,
+    NotificacionesExternasModule,
     ReintegrosModule,
     DescuentosModule,
   ],

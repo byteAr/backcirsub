@@ -12,7 +12,8 @@
     { "key": "dni", "value": "34824092", "type": "string" },
     { "key": "password", "value": "", "type": "string" },
     { "key": "userId", "value": "", "type": "string" },
-    { "key": "tramiteId", "value": "1", "type": "string" }
+    { "key": "tramiteId", "value": "1", "type": "string" },
+    { "key": "claveExterna", "value": "", "type": "string" }
   ],
   "event": [
     {
@@ -380,6 +381,50 @@
               "path": ["admin-notifications", "messages", "{{userId}}"]
             },
             "description": "Lo que ve el asociado en la campanita, con el contador de no leídos."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notificaciones externas (otros sistemas)",
+      "description": "Para que gestión, el panel de admin u otro sistema les mande notificaciones a los asociados. Usa la clave de esa app en la variable `claveExterna` (no el token del login). Ver docs/notificaciones-externas.md.",
+      "item": [
+        {
+          "name": "⚠️ Enviar a un asociado",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-KEY", "value": "{{claveExterna}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"dni\": \"{{dni}}\",\n  \"titulo\": \"Prueba\",\n  \"cuerpo\": \"Mensaje de prueba\"\n}" },
+            "url": { "raw": "{{baseUrl}}/notificaciones-externas/enviar", "host": ["{{baseUrl}}"], "path": ["notificaciones-externas", "enviar"] },
+            "description": "⚠️ Le llega a esa persona. 201 con { ok, pushed }; pushed=false quiere decir que no tiene las notificaciones prendidas, pero el mensaje le queda guardado."
+          }
+        },
+        {
+          "name": "⚠️⚠️ Enviar a TODOS los asociados",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-KEY", "value": "{{claveExterna}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"titulo\": \"\",\n  \"cuerpo\": \"\"\n}" },
+            "url": { "raw": "{{baseUrl}}/notificaciones-externas/enviar-todos", "host": ["{{baseUrl}}"], "path": ["notificaciones-externas", "enviar-todos"] },
+            "description": "⚠️⚠️ Le llega a todo el padrón y no se puede deshacer. Contesta 202 con un id; el resultado se ve en \"Estado de un envío a todos\"."
+          }
+        },
+        {
+          "name": "Estado de un envío a todos",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-KEY", "value": "{{claveExterna}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/notificaciones-externas/envios/<id>", "host": ["{{baseUrl}}"], "path": ["notificaciones-externas", "envios", "<id>"] },
+            "description": "Reemplazá <id> por el que devolvió el envío a todos. estado: en-curso, terminado o error."
           }
         }
       ]
